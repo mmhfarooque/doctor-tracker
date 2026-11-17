@@ -22,7 +22,7 @@ jobs:
       MONGODB_URI: mongodb://localhost:27017/doctor_tracker
       JWT_SECRET: ci_only_secret_that_is_longer_than_thirty_two_characters
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -41,7 +41,7 @@ jobs:
     env:
       NEXT_PUBLIC_API_URL: http://localhost:5000/api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
