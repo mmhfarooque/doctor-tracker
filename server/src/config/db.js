@@ -19,18 +19,6 @@ const connectDB = async () => {
       console.warn('[MongoDB] Disconnected from database cluster.');
     });
 
-    // Graceful shutdown
-    process.on('SIGINT', async () => {
-      await mongoose.connection.close();
-      console.log('[MongoDB] Connection closed due to application termination.');
-      process.exit(0);
-    });
-
-    process.on('SIGTERM', async () => {
-      await mongoose.connection.close();
-      console.log('[MongoDB] Connection closed due to application termination.');
-      process.exit(0);
-    });
   } catch (error) {
     console.error(`[MongoDB] Connection error: ${error.message}`);
     process.exit(1);

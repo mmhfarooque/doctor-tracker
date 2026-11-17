@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import hpp from 'hpp';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
+import mongoose from 'mongoose';
 import { errorHandler } from './middleware/errorHandler.js';
 import { mongoSanitizeMiddleware } from './middleware/sanitizeMiddleware.js';
 
@@ -102,8 +103,10 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
+  const dbReady = mongoose.connection.readyState === 1;
+  res.status(dbReady ? 200 : 503).json({
+    status: dbReady ? 'healthy' : 'degraded',
+    database: dbReady ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString(),
     service: 'Doctor Tracker REST API',
   });
