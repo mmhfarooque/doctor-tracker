@@ -80,6 +80,7 @@ export const getPatients = async (req, res, next) => {
         .sort(sort)
         .skip(skip)
         .limit(limit)
+        .select('-__v')
         .lean(),
     ]);
 
@@ -107,10 +108,9 @@ export const getPatientById = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid patient ID format' });
     }
 
-    const patient = await Patient.findById(req.params.id).populate(
-      'doctor',
-      'name specialization hospital email phone'
-    );
+    const patient = await Patient.findById(req.params.id)
+      .populate('doctor', 'name specialization hospital email phone')
+      .select('-__v');
 
     if (!patient) {
       return res.status(404).json({

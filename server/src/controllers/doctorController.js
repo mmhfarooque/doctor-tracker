@@ -76,6 +76,7 @@ export const getDoctors = async (req, res, next) => {
         .sort(sort)
         .skip(skip)
         .limit(limit)
+        .select('-__v')
         .lean(),
     ]);
 
@@ -120,7 +121,7 @@ export const getDoctorById = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
     }
 
-    const doctor = await Doctor.findById(req.params.id);
+    const doctor = await Doctor.findById(req.params.id).select('-__v');
     if (!doctor) {
       return res.status(404).json({
         success: false,
@@ -267,7 +268,7 @@ export const deleteDoctor = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
     }
 
-    const doctor = await Doctor.findById(req.params.id);
+    const doctor = await Doctor.findById(req.params.id).select('-__v');
     if (!doctor) {
       return res.status(404).json({
         success: false,
@@ -298,7 +299,7 @@ export const getDoctorPatients = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
     }
 
-    const doctor = await Doctor.findById(req.params.id);
+    const doctor = await Doctor.findById(req.params.id).select('-__v');
     if (!doctor) {
       return res.status(404).json({
         success: false,
@@ -333,6 +334,7 @@ export const getDoctorPatients = async (req, res, next) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(safeLimit)
+        .select('-__v')
         .lean(),
     ]);
 
@@ -366,7 +368,7 @@ export const addPatientToDoctor = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
     }
 
-    const doctor = await Doctor.findById(req.params.id);
+    const doctor = await Doctor.findById(req.params.id).select('-__v');
     if (!doctor) {
       return res.status(404).json({
         success: false,

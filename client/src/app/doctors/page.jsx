@@ -428,6 +428,7 @@ export default function DoctorsPage() {
             <input
               type="text"
               required
+              maxLength={100}
               placeholder="e.g. Dr. Jennifer Lawrence"
               value={newDoctor.name}
               onChange={(e) => setNewDoctor({ ...newDoctor, name: e.target.value })}
@@ -470,6 +471,7 @@ export default function DoctorsPage() {
             <input
               type="text"
               required
+              maxLength={120}
               placeholder="e.g. St. Jude Memorial Hospital"
               value={newDoctor.hospital}
               onChange={(e) => setNewDoctor({ ...newDoctor, hospital: e.target.value })}
@@ -483,6 +485,7 @@ export default function DoctorsPage() {
               <input
                 type="tel"
                 required
+                maxLength={30}
                 placeholder="+1 (555) 000-0000"
                 value={newDoctor.phone}
                 onChange={(e) => setNewDoctor({ ...newDoctor, phone: e.target.value })}
@@ -494,6 +497,7 @@ export default function DoctorsPage() {
               <input
                 type="email"
                 required
+                maxLength={100}
                 placeholder="doctor@hospital.org"
                 value={newDoctor.email}
                 onChange={(e) => setNewDoctor({ ...newDoctor, email: e.target.value })}
@@ -506,6 +510,7 @@ export default function DoctorsPage() {
             <label className="block text-xs font-semibold text-slate-700">Professional Bio / Notes</label>
             <textarea
               rows={2}
+              maxLength={500}
               placeholder="Clinical focus, board certifications..."
               value={newDoctor.bio}
               onChange={(e) => setNewDoctor({ ...newDoctor, bio: e.target.value })}

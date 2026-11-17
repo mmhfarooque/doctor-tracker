@@ -479,6 +479,7 @@ export default function PatientsPage() {
             <input
               type="text"
               required
+              maxLength={100}
               placeholder="e.g. Thomas Shelby"
               value={newPatient.name}
               onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })}
@@ -519,6 +520,7 @@ export default function PatientsPage() {
               <input
                 type="text"
                 required
+                maxLength={150}
                 placeholder="e.g. Type 2 Diabetes"
                 value={newPatient.condition}
                 onChange={(e) => setNewPatient({ ...newPatient, condition: e.target.value })}
@@ -563,6 +565,7 @@ export default function PatientsPage() {
               <label className="block text-xs font-semibold text-slate-700">Contact Phone</label>
               <input
                 type="tel"
+                maxLength={30}
                 placeholder="+1 (555) 000-0000"
                 value={newPatient.phone}
                 onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
@@ -573,6 +576,7 @@ export default function PatientsPage() {
               <label className="block text-xs font-semibold text-slate-700">Contact Email</label>
               <input
                 type="email"
+                maxLength={100}
                 placeholder="patient@example.com"
                 value={newPatient.email}
                 onChange={(e) => setNewPatient({ ...newPatient, email: e.target.value })}
@@ -585,6 +589,7 @@ export default function PatientsPage() {
             <label className="block text-xs font-semibold text-slate-700">Clinical Notes</label>
             <textarea
               rows={2}
+              maxLength={1000}
               placeholder="Clinical observation, ongoing prescription..."
               value={newPatient.notes}
               onChange={(e) => setNewPatient({ ...newPatient, notes: e.target.value })}

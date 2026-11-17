@@ -158,7 +158,7 @@ All endpoints (except login/register/health) require header `Authorization: Bear
 
 ---
 
-## 5. Security & Sanitization Architecture (4 Passes Completed)
+## 5. Security & Sanitization Architecture (5 Passes Completed)
 
 1. **NoSQL Injection Neutralization:**
    * Global `mongoSanitizeMiddleware` recursively scrubs `$` and `.` from `req.body`, `req.query`, and `req.params`.
@@ -174,27 +174,35 @@ All endpoints (except login/register/health) require header `Authorization: Bear
 4. **XSS & HTML Scrubbing:**
    * All user string fields pass through `sanitizeString()` which strips `<...>` tags and angle brackets.
    * Client-side React exclusively uses JSX curly-brace escaping (zero instances of `dangerouslySetInnerHTML`).
+   * Form inputs across client views strictly enforce `maxLength` bounds to prevent oversized paste attacks.
 
-5. **Authentication Hardening:**
+5. **Authentication Hardening & Timing-Attack Prevention:**
+   * Constant-time dummy hash verification: on non-existent accounts, `bcrypt.compare()` runs against a precomputed dummy hash, neutralizing time-based user enumeration attacks.
    * Passwords hashed via `bcrypt` with salt rounds.
    * Mongoose `User.toJSON` schema transformer automatically deletes `password` and `__v` upon serialization.
    * JWT verification strictly enforces `{ algorithms: ['HS256'] }`.
    * Error messages use timing-safe generic descriptions (`"Invalid email or password"`).
 
-6. **Rate Limiting & DoS Prevention:**
+6. **Environment Integrity & Fail-Fast Startup:**
+   * `validateEnv()` runs on boot to enforce that in production mode, `JWT_SECRET` must be set and be at least 32 characters long.
+
+7. **Rate Limiting & DoS Prevention:**
    * Auth endpoints (`/api/auth/login`, `/api/auth/register`) capped at **25 requests / 15 mins**.
    * API endpoints capped at **500 requests / 15 mins**.
    * Express JSON and urlencoded parsers capped at **1MB payload limit**.
+   * Reverse proxy trust enabled (`trust proxy: 1`) for accurate IP logging behind Nginx.
 
-7. **HTTP Security Headers & Content Security Policy (CSP):**
+8. **HTTP Security Headers & Content Security Policy (CSP):**
    * Express applies `helmet` (`crossOriginResourcePolicy`, `xContentTypeOptions`, `xFrameOptions`).
+   * Express server calls `app.disable('x-powered-by')` to conceal backend framework.
    * Next.js config applies strict CSP (`default-src 'self'`, `frame-ancestors 'none'`, etc.), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`.
-   * `poweredByHeader: false` disables server fingerprinting.
+   * `poweredByHeader: false` disables Next.js server fingerprinting.
 
-8. **Clinical Anti-Caching Headers (HIPAA Compliance):**
+9. **Clinical Anti-Caching Headers (HIPAA Compliance):**
    * All `/api` responses send `Cache-Control: no-store, no-cache, must-revalidate` to prevent patient diagnostic data from lingering in shared browser caches.
 
-9. **Secret Hygiene:**
+10. **Information Disclosure & Secret Hygiene:**
+   * MongoDB version keys (`__v`) are stripped from query projections (`select('-__v')`).
    * Zero passwords or connection URIs exist in git commit history.
    * All credentials isolated to `.env` / `.env.local` files protected by `.gitignore`.
 

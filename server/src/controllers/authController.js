@@ -1,10 +1,15 @@
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import { isValidEmail, sanitizeString } from '../utils/sanitize.js';
+
+// Precomputed valid bcrypt hash used to equalize execution time on non-existent accounts
+const DUMMY_HASH = '$2a$10$wT2gVz3sR1mP7Qn9t4K8qu5e0Y1zX3mS8Vn3t4K9qu6e1Y2zX4mS9';
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'doctor_tracker_jwt_secret_key_2026', {
     expiresIn: '30d',
+    algorithm: 'HS256',
   });
 };
 
@@ -15,14 +20,14 @@ export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
       return res.status(400).json({
         success: false,
         message: 'Please provide both email and password',
       });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    const cleanEmail = email.toLowerCase().trim().slice(0, 100);
     if (!isValidEmail(cleanEmail)) {
       return res.status(400).json({
         success: false,
@@ -32,8 +37,15 @@ export const login = async (req, res, next) => {
 
     const user = await User.findOne({ email: cleanEmail });
 
-    // Timing-safe response: generic error message to prevent user enumeration
-    if (user && (await user.comparePassword(password))) {
+    let isMatch = false;
+    if (user) {
+      isMatch = await user.comparePassword(password);
+    } else {
+      // Execute dummy bcrypt comparison to neutralize time-based user enumeration side-channel attacks
+      await bcrypt.compare(password, DUMMY_HASH);
+    }
+
+    if (user && isMatch) {
       res.json({
         success: true,
         data: {
@@ -45,6 +57,7 @@ export const login = async (req, res, next) => {
         },
       });
     } else {
+      // Uniform generic error message
       res.status(401).json({
         success: false,
         message: 'Invalid email or password',
@@ -62,14 +75,14 @@ export const register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
 
-    if (!name || !email || !password) {
+    if (!name || !email || !password || typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
       return res.status(400).json({
         success: false,
         message: 'Please provide name, email, and password',
       });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    const cleanEmail = email.toLowerCase().trim().slice(0, 100);
     if (!isValidEmail(cleanEmail)) {
       return res.status(400).json({
         success: false,
@@ -77,10 +90,10 @@ export const register = async (req, res, next) => {
       });
     }
 
-    if (password.length < 6) {
+    if (password.length < 6 || password.length > 128) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 6 characters long',
+        message: 'Password must be between 6 and 128 characters long',
       });
     }
 
@@ -93,7 +106,7 @@ export const register = async (req, res, next) => {
     }
 
     const user = await User.create({
-      name: sanitizeString(name),
+      name: sanitizeString(name, 100),
       email: cleanEmail,
       password,
     });
@@ -118,7 +131,14 @@ export const register = async (req, res, next) => {
 // @access  Private
 export const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
+    const user = await User.findById(req.user._id).select('-password -__v');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
     res.json({
       success: true,
       data: user,
