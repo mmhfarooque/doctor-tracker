@@ -1,8 +1,8 @@
 # DOCTOR TRACKER — COMPLETE PROJECT HANDOVER & ARCHITECTURE LOG
 > **Target Audience:** Claude, Codex, OpenAI, Senior Engineers, and DevOps Automators.  
 > **Repository Path:** `/home/mimos/Projects/Doctor Tracker`  
-> **Current Status:** 100% Fully Implemented, Verified, Hardened, and Git Committed.  
-> **Last Updated:** 2026-11-17
+> **Current Status:** Feature-complete, hardened, tested (15 API tests). Deploy-ready (Render + Vercel), NOT deployed yet — owner wants a UI pass first.  
+> **Last Updated:** 2026-11-17 (review fixes, see §9)
 
 ---
 
@@ -26,13 +26,10 @@
 * **Cluster:** `Cluster0` (AWS Mumbai `ap-south-1`, MongoDB Engine v8.0+)
 * **Database Name:** `doctor_tracker`
 * **Cluster Host:** `cluster0.lfzluek.mongodb.net`
-* **Network Access / Firewall:** Configured with `0.0.0.0/0` (Whitelisted for both local development and remote VPS deployment).
-* **Connection String (Configured in `server/.env`):**
-  ```text
-  mongodb+srv://<username>:<password>@cluster0.lfzluek.mongodb.net/doctor_tracker?retryWrites=true&w=majority
-  ```
+* **Network Access / Firewall:** currently `0.0.0.0/0` (needed for Render free tier, which has no static outbound IP). If hosting on a VPS instead, restrict to that IP.
+* **Connection String:** stored ONLY in `server/.env` (git-ignored). Never write it into docs or commits.
 
-### Default Seeded Admin Credentials
+### Default Seeded Admin Credentials (demo data only)
 * **Email:** `admin@doctortracker.com`
 * **Password:** `Password123!`
 * **Role:** `admin`
@@ -127,7 +124,7 @@ All endpoints (except login/register/health) require header `Authorization: Bear
 | Method | Endpoint | Access | Description |
 |---|---|---|---|
 | `POST` | `/api/auth/login` | Public (Rate-limited: 25/15m) | Body: `{ email, password }`. Returns JWT + user details. |
-| `POST` | `/api/auth/register` | Public (Rate-limited: 25/15m) | Body: `{ name, email, password }`. Creates admin user. |
+| `POST` | `/api/auth/register` | Protected (admin only, rate-limited 25/15m) | Body: `{ name, email, password }`. An existing admin creates another admin. Public sign-up is closed. |
 | `GET` | `/api/auth/me` | Protected | Returns current authenticated user record. |
 
 ### Doctors Management (`/api/doctors`)
@@ -137,7 +134,7 @@ All endpoints (except login/register/health) require header `Authorization: Bear
 | `POST` | `/api/doctors` | Protected | Body: `{ name, specialization, hospital, phone, email, status, experienceYears, bio }`. Creates new doctor. |
 | `GET` | `/api/doctors/:id` | Protected | Param: Valid 24-hex ObjectId. Returns single doctor profile + total patient count. |
 | `PUT` | `/api/doctors/:id` | Protected | Param: Valid 24-hex ObjectId. Body: Updated fields. |
-| `DELETE` | `/api/doctors/:id` | Protected | Param: Valid 24-hex ObjectId. Deletes doctor and cascades deletion to assigned patients. |
+| `DELETE` | `/api/doctors/:id` | Protected | Param: Valid 24-hex ObjectId. Returns 409 while patients are still assigned (no silent cascade). |
 | `GET` | `/api/doctors/:id/patients` | Protected | Query: `search`, `condition`, `status`, `page`, `limit`. Returns patients assigned to doctor. |
 | `POST` | `/api/doctors/:id/patients` | Protected | Body: `{ name, age, gender, condition, status, phone, email, notes, admissionDate }`. Adds patient under doctor. |
 | `DELETE` | `/api/doctors/:id/patients/:patientId` | Protected | Removes patient from specific doctor's roster. |
@@ -253,8 +250,8 @@ cd /var/www/doctor-tracker
 cat << 'EOF' > server/.env
 PORT=5000
 NODE_ENV=production
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.lfzluek.mongodb.net/doctor_tracker?retryWrites=true&w=majority
-JWT_SECRET=<random-64-char-secret>
+MONGODB_URI=<atlas connection string from server/.env>
+JWT_SECRET=<64+ random chars: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))">
 CLIENT_URL=https://your-domain.com
 EOF
 
@@ -309,6 +306,45 @@ bb2d9f6 security: add input sanitization, ReDoS regex escaping, Helmet HTTP head
 cb59925 fix: optimize auth hydration and instant login page rendering
 770e6cb feat: complete Doctor Tracker full-stack application (Next.js, Express, MongoDB Atlas)
 ```
+
+---
+
+## 9. Review Fixes — 2026-11-17 (evening)
+
+Full review of backend, frontend and DB, then fixes. All verified: `npm test` (15/15 pass), `next build` OK, screenshots taken.
+
+**Security**
+* `/api/auth/register` now requires an authenticated admin (was public → anyone could become admin).
+* Removed hardcoded JWT fallback secret; server refuses to start without `JWT_SECRET` (≥32 chars) in every mode.
+* JWT lifetime 30d → 12h (`JWT_EXPIRES_IN`). Dummy timing hash is now a real bcrypt hash generated at startup.
+* Secrets removed from these handover docs AND from git history (history rewritten with filter-branch; pre-rewrite backup in the session scratchpad only).
+* Production error responses hide 5xx messages; malformed JSON → 400; CORS rejection → 403.
+* Next.js CSP: `'unsafe-eval'` only in dev; `connect-src` limited to the API origin (was any `https:`); added base-uri/form-action/object-src.
+
+**Backend / DB**
+* Non-string body fields (arrays/objects/numbers) now return 400 instead of 500 (`asString`, `parseBoundedInt` in `utils/validators.js`). Enum lists shared.
+* Add-patient-under-doctor now validates email; invalid `experienceYears` → 400 instead of NaN.
+* Doctor delete refuses (409) while patients are assigned — no more silent cascade delete of clinical records.
+* `Doctor.email` is now a unique index (race-safe duplicates).
+* Indexes cleaned: removed duplicates/unused text indexes; added `createdAt` / `status` indexes matching real queries. Live DB synced with `npm run sync-indexes` (no data touched). Seeder also syncs.
+* Dashboard: 7 independent queries run in parallel (`Promise.all`); timeline bounded to last 12 months; `estimatedDocumentCount` for totals.
+* `server/src/app.js` (Express app) split from `server.js` (env check + DB connect + listen) so tests can import the app.
+* Tests: `server/tests/api.test.js` (node:test, zero deps) against isolated DB `doctor_tracker_test`, dropped after.
+
+**Frontend**
+* Search is debounced (300 ms, `src/hooks/useDebounce.js`) and stale responses are ignored (request sequence ref) on Doctors, Patients and Doctor Profile pages.
+* Auth redirects use `router.replace` (no full page reloads).
+* Demo-credentials box controlled by `NEXT_PUBLIC_SHOW_DEMO_LOGIN` (default shown, for reviewers).
+
+**Deploy prep (not deployed)**
+* `render.yaml` blueprint for the API (root `server/`, health check `/health`). Frontend → Vercel, root `client/`. Steps in README §7.
+
+**Known UI items for the owner's UI pass** (seen in screenshots, not changed):
+* Mobile patients table is cramped/horizontally scrolls; start-date filter has no label on mobile.
+* Doctor dropdowns load at most 100 doctors (API page cap).
+
+**Owner TODO before going public**
+* Change the Atlas DB user password (old one was in git history before the rewrite) and update `server/.env`. Generate a new `JWT_SECRET`.
 
 ---
 

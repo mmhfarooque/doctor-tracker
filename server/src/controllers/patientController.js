@@ -1,7 +1,7 @@
 import Patient from '../models/Patient.js';
 import Doctor from '../models/Doctor.js';
 import { escapeRegex, sanitizeString, isValidEmail } from '../utils/sanitize.js';
-import { isValidObjectId } from '../utils/validators.js';
+import { isValidObjectId, asString, parseBoundedInt, PATIENT_STATUSES, GENDERS } from '../utils/validators.js';
 
 // @desc    Get all patients with search, filters & pagination
 // @route   GET /api/patients
@@ -35,8 +35,8 @@ export const getPatients = async (req, res, next) => {
     }
 
     // Filter by Status
-    if (status && typeof status === 'string' && status !== 'all') {
-      query.status = sanitizeString(status);
+    if (typeof status === 'string' && PATIENT_STATUSES.includes(status)) {
+      query.status = status;
     }
 
     // Filter by Assigned Doctor (validate ObjectId format)
@@ -133,9 +133,15 @@ export const getPatientById = async (req, res, next) => {
 // @access  Private
 export const createPatient = async (req, res, next) => {
   try {
-    const { name, age, gender, condition, status, phone, email, doctor, notes, admissionDate } = req.body;
+    const name = asString(req.body.name);
+    const condition = asString(req.body.condition);
+    const phone = asString(req.body.phone);
+    const email = asString(req.body.email);
+    const notes = asString(req.body.notes);
+    const doctor = asString(req.body.doctor);
+    const { age, gender, status, admissionDate } = req.body;
 
-    if (!name || age === undefined || !gender || !condition || !doctor) {
+    if (!name.trim() || age === undefined || age === '' || !gender || !condition.trim() || !doctor) {
       return res.status(400).json({
         success: false,
         message: 'Name, age, gender, condition, and doctor are required fields',
@@ -149,8 +155,8 @@ export const createPatient = async (req, res, next) => {
       });
     }
 
-    const safeAge = parseInt(age, 10);
-    if (isNaN(safeAge) || safeAge < 0 || safeAge > 130) {
+    const safeAge = parseBoundedInt(age, 0, 130);
+    if (safeAge === null) {
       return res.status(400).json({
         success: false,
         message: 'Please provide a valid age between 0 and 130',
@@ -180,15 +186,13 @@ export const createPatient = async (req, res, next) => {
     const patient = await Patient.create({
       name: sanitizeString(name),
       age: safeAge,
-      gender: ['Male', 'Female', 'Other'].includes(gender) ? gender : 'Male',
+      gender: GENDERS.includes(gender) ? gender : 'Other',
       condition: sanitizeString(condition),
-      status: ['Stable', 'Critical', 'Under Observation', 'Recovering', 'Discharged'].includes(status)
-        ? status
-        : 'Stable',
-      phone: sanitizeString(phone || ''),
+      status: PATIENT_STATUSES.includes(status) ? status : 'Stable',
+      phone: sanitizeString(phone),
       email: cleanEmail,
       doctor,
-      notes: sanitizeString(notes || ''),
+      notes: sanitizeString(notes, 2000),
       admissionDate: admissionDate && !isNaN(new Date(admissionDate).getTime()) ? new Date(admissionDate) : new Date(),
     });
 
@@ -213,7 +217,11 @@ export const updatePatient = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid patient ID format' });
     }
 
-    const { name, age, gender, condition, status, phone, email, doctor, notes, admissionDate } = req.body;
+    const name = asString(req.body.name);
+    const condition = asString(req.body.condition);
+    const email = asString(req.body.email);
+    const doctor = asString(req.body.doctor);
+    const { age, gender, status, phone, notes, admissionDate } = req.body;
 
     if (doctor && !isValidObjectId(doctor)) {
       return res.status(400).json({ success: false, message: 'Invalid assigned doctor ID format' });
@@ -249,9 +257,9 @@ export const updatePatient = async (req, res, next) => {
     }
 
     let safeAge = patient.age;
-    if (age !== undefined) {
-      const parsedAge = parseInt(age, 10);
-      if (isNaN(parsedAge) || parsedAge < 0 || parsedAge > 130) {
+    if (age !== undefined && age !== '') {
+      const parsedAge = parseBoundedInt(age, 0, 130);
+      if (parsedAge === null) {
         return res.status(400).json({
           success: false,
           message: 'Please provide a valid age between 0 and 130',
@@ -263,17 +271,15 @@ export const updatePatient = async (req, res, next) => {
     patient = await Patient.findByIdAndUpdate(
       req.params.id,
       {
-        name: name ? sanitizeString(name) : patient.name,
+        name: name.trim() ? sanitizeString(name) : patient.name,
         age: safeAge,
-        gender: gender && ['Male', 'Female', 'Other'].includes(gender) ? gender : patient.gender,
-        condition: condition ? sanitizeString(condition) : patient.condition,
-        status: status && ['Stable', 'Critical', 'Under Observation', 'Recovering', 'Discharged'].includes(status)
-          ? status
-          : patient.status,
-        phone: phone !== undefined ? sanitizeString(phone) : patient.phone,
+        gender: GENDERS.includes(gender) ? gender : patient.gender,
+        condition: condition.trim() ? sanitizeString(condition) : patient.condition,
+        status: PATIENT_STATUSES.includes(status) ? status : patient.status,
+        phone: typeof phone === 'string' ? sanitizeString(phone) : patient.phone,
         email: cleanEmail,
         doctor: doctor || patient.doctor,
-        notes: notes !== undefined ? sanitizeString(notes) : patient.notes,
+        notes: typeof notes === 'string' ? sanitizeString(notes, 2000) : patient.notes,
         admissionDate: admissionDate && !isNaN(new Date(admissionDate).getTime()) ? new Date(admissionDate) : patient.admissionDate,
       },
       { new: true, runValidators: true }

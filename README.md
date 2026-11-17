@@ -144,13 +144,38 @@ flowchart TD
 
 ## 5. Visual Evidence
 
-| View | Description | Key Features |
-|---|---|---|
-| **Administrative Dashboard** | Comprehensive analytics overview | KPI stat cards, Recharts admission timeline, patients-per-doctor caseload bar chart, specialty distribution pie chart, and recent admissions table. |
-| **Doctors Management** | Physician roster directory | Multi-field search, specialty filter, status filter, date-range filter, server-side pagination, and 'Register New Doctor' modal. |
-| **Doctor Profile & Roster** | Individual doctor detail page | Complete doctor profile, direct 'Admit Patient under Doctor' action, assigned patients table, and patient removal action. |
-| **Dedicated Patients Page** | Global patient management | Full listing with condition search, diagnosis filter, status filter, attending physician filter, date range filter, Edit Patient modal, and Delete Patient confirmation modal. |
-| **Secure Authentication** | Protected admin portal | JWT-secured login with demo credentials pre-fill helper and responsive medical layout. |
+Screenshots are in [`docs/screenshots/`](docs/screenshots) (desktop 1440×900, mobile 390×844).
+
+### Dashboard
+| Desktop | Mobile |
+|---|---|
+| <img src="docs/screenshots/dashboard-desktop.png" width="620" alt="Dashboard desktop"> | <img src="docs/screenshots/dashboard-mobile.png" width="200" alt="Dashboard mobile"> |
+
+KPI cards, monthly admission timeline, patients-per-doctor caseload, specialty distribution, patient status breakdown and recent admissions.
+
+### Doctors
+| Desktop | Mobile |
+|---|---|
+| <img src="docs/screenshots/doctors-desktop.png" width="620" alt="Doctors desktop"> | <img src="docs/screenshots/doctors-mobile.png" width="200" alt="Doctors mobile"> |
+
+Search, specialty / status / date-range filters, server-side pagination, add doctor, add patient under a doctor.
+
+### Doctor Profile & Patient Roster
+| Desktop | Mobile |
+|---|---|
+| <img src="docs/screenshots/doctor-profile-desktop.png" width="620" alt="Doctor profile desktop"> | <img src="docs/screenshots/doctor-profile-mobile.png" width="200" alt="Doctor profile mobile"> |
+
+### Patients
+| Desktop | Mobile |
+|---|---|
+| <img src="docs/screenshots/patients-desktop.png" width="620" alt="Patients desktop"> | <img src="docs/screenshots/patients-mobile.png" width="200" alt="Patients mobile"> |
+
+Full patient list with search, condition / status / doctor / admission-date filters, edit and delete.
+
+### Login
+| Desktop | Mobile |
+|---|---|
+| <img src="docs/screenshots/login-desktop.png" width="620" alt="Login desktop"> | <img src="docs/screenshots/login-mobile.png" width="200" alt="Login mobile"> |
 
 ---
 
@@ -174,9 +199,9 @@ Doctor Tracker/
 │   │   │   ├── dashboard/               # StatCard, AnalyticsCharts (Recharts)
 │   │   │   └── layout/                  # Sidebar, Navbar, AppLayout
 │   │   ├── context/                     # AuthContext with Route Guards
+│   │   ├── hooks/                       # useDebounce (search inputs)
 │   │   └── lib/                         # Axios client instance & interceptors
 │   ├── .env.example
-│   ├── .env.local
 │   ├── package.json
 │   └── tailwind.config.js
 │
@@ -187,13 +212,52 @@ Doctor Tracker/
 │   │   ├── middleware/                  # JWT auth guard, Central error handler
 │   │   ├── models/                      # User, Doctor, Patient Mongoose Schemas (Indexed)
 │   │   ├── routes/                      # REST endpoints (/api/auth, /api/doctors, /api/patients, /api/dashboard)
-│   │   ├── scripts/                     # seed.js (Admin, Doctors, Patients demo seeder)
-│   │   └── server.js                    # Express application entry
+│   │   ├── scripts/                     # seed.js (demo data), syncIndexes.js (align DB indexes)
+│   │   ├── utils/                       # sanitize + validation helpers
+│   │   ├── app.js                       # Express app (middleware + routes), importable by tests
+│   │   └── server.js                    # Entry: env check, DB connect, listen
+│   ├── tests/                           # API integration tests (node:test)
 │   ├── .env.example
-│   ├── .env
 │   └── package.json
 │
-├── resource/                            # Project Specification PDF
+├── docs/screenshots/                    # README visual evidence
+├── render.yaml                          # Render blueprint for the API
 ├── package.json                         # Root helper scripts
 └── README.md                            # Primary Technical Documentation
 ```
+
+---
+
+## 7. Testing
+
+```bash
+cd server && npm test
+```
+15 integration tests (built-in `node:test`, no extra dependencies) cover login, closed public sign-up, NoSQL-injection rejection, doctor create / duplicate email / search / pagination, adding patients under a doctor, editing and filtering patients, delete rules, dashboard aggregation and ID validation. They run against an isolated `doctor_tracker_test` database on the same cluster, which is dropped afterwards.
+
+---
+
+## 8. Deployment
+
+**Backend → Render (free tier)**
+1. New → Blueprint → select this repo (uses [`render.yaml`](render.yaml); root `server/`, health check `/health`).
+2. Set environment variables: `MONGODB_URI`, `JWT_SECRET` (64 random chars), `CLIENT_URL` (the Vercel URL, comma-separate several).
+3. In MongoDB Atlas → Network Access, allow `0.0.0.0/0` (Render free has no static IP).
+4. Note: the free instance sleeps after 15 minutes idle; the first request then takes about 30–50 seconds.
+
+**Frontend → Vercel**
+1. New Project → import this repo → Root Directory `client` (Next.js is auto-detected).
+2. Environment variables: `NEXT_PUBLIC_API_URL=https://<render-service>.onrender.com/api`, optionally `NEXT_PUBLIC_SHOW_DEMO_LOGIN=true` so reviewers see the demo credentials.
+3. Deploy, then put the Vercel URL into `CLIENT_URL` on Render.
+
+**Demo login:** `admin@doctortracker.com` / `Password123!` (created by `npm run seed`).
+
+---
+
+## 9. Security Notes
+
+* Only authenticated admins can use the API; public self-registration is disabled (admins create admins).
+* JWT (HS256 only, 12 h expiry), bcrypt password hashing, timing-safe login, rate limiting on auth and API.
+* Input validation on every write (type checks, enums, length caps, ObjectId checks), NoSQL operator / prototype-pollution stripping, HPP, Helmet, strict CORS in production.
+* No-store cache headers on all API responses (patient data never cached), CSP and frame protection on the client.
+* Secrets live only in git-ignored `.env` files.

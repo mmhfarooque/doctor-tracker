@@ -148,6 +148,10 @@ const seedDB = async () => {
       Patient.deleteMany({}),
     ]);
 
+    // Make the live indexes match the schemas exactly (drops stale ones such as old text indexes)
+    console.log('[Seeder] Syncing indexes...');
+    await Promise.all([User.syncIndexes(), Doctor.syncIndexes(), Patient.syncIndexes()]);
+
     // 2. Create Admin user
     console.log('[Seeder] Creating admin user...');
     const admin = await User.create({

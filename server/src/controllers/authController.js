@@ -2,13 +2,14 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import { isValidEmail, sanitizeString } from '../utils/sanitize.js';
+import { JWT_EXPIRES_IN } from '../config/envCheck.js';
 
-// Precomputed valid bcrypt hash used to equalize execution time on non-existent accounts
-const DUMMY_HASH = '$2a$10$wT2gVz3sR1mP7Qn9t4K8qu5e0Y1zX3mS8Vn3t4K9qu6e1Y2zX4mS9';
+// Real bcrypt hash generated at startup, used to equalize execution time on non-existent accounts
+const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing-equalization', 10);
 
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'doctor_tracker_jwt_secret_key_2026', {
-    expiresIn: '30d',
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
     algorithm: 'HS256',
   });
 };
@@ -68,9 +69,9 @@ export const login = async (req, res, next) => {
   }
 };
 
-// @desc    Register a new user (admin)
+// @desc    Register a new user (admin) — only an authenticated admin can create another admin
 // @route   POST /api/auth/register
-// @access  Public
+// @access  Private
 export const register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;

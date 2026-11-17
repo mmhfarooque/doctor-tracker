@@ -25,9 +25,23 @@ export const errorHandler = (err, req, res, next) => {
       .join(', ');
   }
 
+  if (err.type === 'entity.parse.failed') {
+    statusCode = 400;
+    message = 'Malformed JSON request body';
+  }
+
+  if (err.message === 'Blocked by CORS policy') {
+    statusCode = 403;
+  }
+
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (isProduction && statusCode >= 500) {
+    message = 'Internal Server Error';
+  }
+
   res.status(statusCode).json({
     success: false,
     message,
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+    ...(isProduction ? {} : { stack: err.stack }),
   });
 };

@@ -6,7 +6,6 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Patient name is required'],
       trim: true,
-      index: true,
     },
     age: {
       type: Number,
@@ -23,7 +22,6 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Patient condition / diagnosis is required'],
       trim: true,
-      index: true,
     },
     status: {
       type: String,
@@ -46,12 +44,10 @@ const patientSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Doctor',
       required: [true, 'Assigned doctor is required'],
-      index: true,
     },
     admissionDate: {
       type: Date,
       default: Date.now,
-      index: true,
     },
     notes: {
       type: String,
@@ -63,11 +59,13 @@ const patientSchema = new mongoose.Schema(
   }
 );
 
-// Performance compound indexes for searching, filtering, and date sorting
+// Compound indexes matching real query shapes (no duplicates of single-field indexes):
+// - doctor roster + patients filtered by doctor, newest first (also serves `doctor` lookups/$group)
+// - condition/status filters, date-range filter + dashboard monthly timeline, default list sort
 patientSchema.index({ doctor: 1, createdAt: -1 });
 patientSchema.index({ condition: 1, status: 1 });
 patientSchema.index({ admissionDate: -1 });
-patientSchema.index({ name: 'text', condition: 'text' });
+patientSchema.index({ createdAt: -1 });
 
 const Patient = mongoose.model('Patient', patientSchema);
 export default Patient;
