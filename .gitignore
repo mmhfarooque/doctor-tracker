@@ -28,3 +28,6 @@ pnpm-debug.log*
 Thumbs.db
 resource/atlas-credentials.env
 resource/dbInfo.txt
+
+# Local reference material (task brief, unrelated images) - never published
+resource/
