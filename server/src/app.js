@@ -13,6 +13,9 @@ import authRoutes from './routes/authRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
 import patientRoutes from './routes/patientRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
+import activityRoutes from './routes/activityRoutes.js';
+import shiftRoutes from './routes/shiftRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 
 const app = express();
 // Trust reverse proxy for accurate IP identification in rate limiters (VPS / Nginx)
@@ -134,6 +137,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/shifts', shiftRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api', activityRoutes); // /api/activity, /api/alerts
 
 // 404 Handler
 app.use((req, res, next) => {

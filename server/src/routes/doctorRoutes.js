@@ -1,37 +1,32 @@
 import express from 'express';
 import {
   getDoctors,
+  getDoctorFilters,
   getDoctorById,
   createDoctor,
   updateDoctor,
   deleteDoctor,
+  reassignDoctorPatients,
   getDoctorPatients,
   addPatientToDoctor,
   deletePatientFromDoctor,
-  getDoctorFilters,
 } from '../controllers/doctorController.js';
-import { protect } from '../middleware/auth.js';
+import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(protect);
 
-router.use(protect); // Require authentication for all doctor routes
+router.get('/', getDoctors);
+router.get('/filters', getDoctorFilters); // before '/:id'
+router.post('/', authorize('admin'), createDoctor);
 
-router.route('/')
-  .get(getDoctors)
-  .post(createDoctor);
+router.get('/:id', getDoctorById);
+router.put('/:id', authorize('admin'), updateDoctor);
+router.delete('/:id', authorize('admin'), deleteDoctor);
+router.post('/:id/reassign', authorize('admin'), reassignDoctorPatients);
 
-router.get('/filters', getDoctorFilters); // must be registered before '/:id'
-
-router.route('/:id')
-  .get(getDoctorById)
-  .put(updateDoctor)
-  .delete(deleteDoctor);
-
-router.route('/:id/patients')
-  .get(getDoctorPatients)
-  .post(addPatientToDoctor);
-
-router.route('/:id/patients/:patientId')
-  .delete(deletePatientFromDoctor);
+router.get('/:id/patients', getDoctorPatients); // doctors: own roster only (checked inside)
+router.post('/:id/patients', authorize('admin', 'doctor'), addPatientToDoctor);
+router.delete('/:id/patients/:patientId', authorize('admin'), deletePatientFromDoctor);
 
 export default router;

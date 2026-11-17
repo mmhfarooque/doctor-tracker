@@ -37,7 +37,7 @@ before(async () => {
   await mongoose.connect(process.env.MONGODB_URI, { dbName: 'doctor_tracker_test' });
   await mongoose.connection.dropDatabase();
   await Promise.all([User.syncIndexes(), Doctor.syncIndexes(), Patient.syncIndexes()]);
-  await User.create({ name: 'Test Admin', email: 'test@example.com', password: 'Secret123!' });
+  await User.create({ name: 'Test Admin', email: 'test@example.com', password: 'Secret123!', role: 'admin' });
   server = app.listen(0);
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -137,9 +137,11 @@ test('dashboard returns aggregated stats', async () => {
   assert.equal(res.body.data.patientsPerDoctor[0].patientCount, 1);
 });
 
-test('removes the patient from the doctor roster, then the doctor can be deleted', async () => {
+test('removing from the roster archives; after a permanent delete the doctor can be deleted', async () => {
   const del = await api('DELETE', `/doctors/${doctorId}/patients/${patientId}`);
-  assert.equal(del.status, 200);
+  assert.equal(del.status, 200); // removed from the roster = archived (restorable)
+  assert.equal((await api('DELETE', `/doctors/${doctorId}`)).status, 409); // archived record still references the doctor
+  assert.equal((await api('DELETE', `/patients/${patientId}`)).status, 200); // permanent delete
   const res = await api('DELETE', `/doctors/${doctorId}`);
   assert.equal(res.status, 200);
 });

@@ -1,516 +1,262 @@
 import Doctor from '../models/Doctor.js';
 import Patient from '../models/Patient.js';
+import Shift from '../models/Shift.js';
 import { escapeRegex, sanitizeString, isValidEmail } from '../utils/sanitize.js';
-import { isValidObjectId, isValidPhone, asString, parseBoundedInt, DOCTOR_STATUSES, PATIENT_STATUSES, GENDERS } from '../utils/validators.js';
+import { isValidObjectId, isValidPhone, asString, parseBoundedInt, DOCTOR_STATUSES, PATIENT_STATUSES } from '../utils/validators.js';
+import { canAccessDoctor } from '../utils/scope.js';
+import { logActivities } from '../utils/activity.js';
+import { createPatient, archivePatient } from './patientController.js';
 
-// @desc    Get all doctors with search, filters & pagination
-// @route   GET /api/doctors
-// @access  Private
+// Active caseload = not discharged and not archived (what counts against a doctor's capacity)
+const ACTIVE = { archivedAt: null, status: { $ne: 'Discharged' } };
+
+const caseloads = async (doctorIds) => {
+  const rows = await Patient.aggregate([
+    { $match: { doctor: { $in: doctorIds }, ...ACTIVE } },
+    { $group: { _id: '$doctor', count: { $sum: 1 } } },
+  ]);
+  return Object.fromEntries(rows.map((r) => [String(r._id), r.count]));
+};
+
+const readDoctorFields = (body, { requireCore }) => {
+  const name = asString(body.name);
+  const specialization = asString(body.specialization);
+  const hospital = asString(body.hospital);
+  const phone = asString(body.phone);
+  const email = asString(body.email).toLowerCase().trim();
+  if (requireCore && (!name.trim() || !specialization.trim() || !hospital.trim() || !phone.trim() || !email)) {
+    return { error: 'Name, specialization, hospital, phone, and email are required fields' };
+  }
+  const out = {};
+  if (name.trim()) out.name = sanitizeString(name);
+  if (specialization.trim()) out.specialization = sanitizeString(specialization);
+  if (hospital.trim()) out.hospital = sanitizeString(hospital);
+  if (phone.trim()) {
+    if (!isValidPhone(phone)) return { error: 'Please provide a valid phone number' };
+    out.phone = sanitizeString(phone);
+  }
+  if (email) {
+    if (!isValidEmail(email)) return { error: 'Please provide a valid email address' };
+    out.email = email;
+  }
+  if (body.status !== undefined && body.status !== '') {
+    if (!DOCTOR_STATUSES.includes(body.status)) return { error: 'Unknown availability status' };
+    out.status = body.status;
+  }
+  if (body.experienceYears !== undefined && body.experienceYears !== '') {
+    const years = parseBoundedInt(body.experienceYears, 0, 70);
+    if (years === null) return { error: 'Experience must be a number between 0 and 70' };
+    out.experienceYears = years;
+  }
+  if (body.maxPatients !== undefined && body.maxPatients !== '') {
+    const cap = parseBoundedInt(body.maxPatients, 1, 200);
+    if (cap === null) return { error: 'Capacity must be a number between 1 and 200' };
+    out.maxPatients = cap;
+  }
+  if (typeof body.bio === 'string') out.bio = sanitizeString(body.bio, 1000);
+  return { fields: out };
+};
+
+// @route GET /api/doctors
 export const getDoctors = async (req, res, next) => {
   try {
     const page = Math.min(10000, Math.max(1, parseInt(req.query.page, 10) || 1));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
-    const skip = (page - 1) * limit;
-
     const { search, specialization, hospital, status, startDate, endDate, sortBy = 'createdAt', order = 'desc' } = req.query;
-
     const query = {};
 
-    // Search functionality with sanitized regex to prevent ReDoS
-    if (search && typeof search === 'string' && search.trim() !== '') {
-      const cleanSearch = escapeRegex(search.trim());
-      const searchRegex = new RegExp(cleanSearch, 'i');
-      query.$or = [
-        { name: searchRegex },
-        { email: searchRegex },
-        { specialization: searchRegex },
-        { hospital: searchRegex },
-      ];
+    if (typeof search === 'string' && search.trim()) {
+      const rx = new RegExp(escapeRegex(search), 'i');
+      query.$or = [{ name: rx }, { email: rx }, { specialization: rx }, { hospital: rx }];
     }
-
-    // Filter by Specialization
-    if (specialization && typeof specialization === 'string' && specialization !== 'all') {
-      query.specialization = sanitizeString(specialization);
-    }
-
-    // Filter by Hospital
-    if (hospital && typeof hospital === 'string' && hospital !== 'all') {
-      query.hospital = sanitizeString(hospital);
-    }
-
-    // Filter by Status
-    if (typeof status === 'string' && DOCTOR_STATUSES.includes(status)) {
-      query.status = status;
-    }
-
-    // Date-wise filtering
+    if (typeof specialization === 'string' && specialization && specialization !== 'all') query.specialization = sanitizeString(specialization);
+    if (typeof hospital === 'string' && hospital && hospital !== 'all') query.hospital = sanitizeString(hospital);
+    if (typeof status === 'string' && DOCTOR_STATUSES.includes(status)) query.status = status;
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) {
-        const start = new Date(startDate);
-        if (!isNaN(start.getTime())) {
-          query.createdAt.$gte = start;
-        }
+      const s = new Date(startDate);
+      const e = new Date(endDate);
+      if (startDate && !Number.isNaN(s.getTime())) query.createdAt.$gte = s;
+      if (endDate && !Number.isNaN(e.getTime())) {
+        e.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = e;
       }
-      if (endDate) {
-        const end = new Date(endDate);
-        if (!isNaN(end.getTime())) {
-          end.setHours(23, 59, 59, 999);
-          query.createdAt.$lte = end;
-        }
-      }
-      if (Object.keys(query.createdAt).length === 0) {
-        delete query.createdAt;
-      }
+      if (!Object.keys(query.createdAt).length) delete query.createdAt;
     }
 
-    // Whitelist allowed sort fields to prevent injection
-    const allowedSortFields = ['createdAt', 'name', 'specialization', 'hospital', 'experienceYears'];
-    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
-    const sort = {};
-    sort[safeSortBy] = order === 'asc' ? 1 : -1;
+    const allowedSort = ['createdAt', 'name', 'specialization', 'hospital', 'experienceYears'];
+    const sort = { [allowedSort.includes(sortBy) ? sortBy : 'createdAt']: order === 'asc' ? 1 : -1, _id: 1 };
 
     const [total, doctors] = await Promise.all([
       Doctor.countDocuments(query),
-      Doctor.find(query)
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .select('-__v')
-        .lean(),
+      Doctor.find(query).sort(sort).skip((page - 1) * limit).limit(limit).select('-__v').lean(),
     ]);
-
-    // Attach patient count to each doctor
-    const doctorIds = doctors.map((d) => d._id);
-    const patientCounts = await Patient.aggregate([
-      { $match: { doctor: { $in: doctorIds } } },
-      { $group: { _id: '$doctor', count: { $sum: 1 } } },
-    ]);
-
-    const countMap = {};
-    patientCounts.forEach((pc) => {
-      countMap[pc._id.toString()] = pc.count;
-    });
-
-    const doctorsWithCounts = doctors.map((d) => ({
-      ...d,
-      patientCount: countMap[d._id.toString()] || 0,
-    }));
+    const counts = await caseloads(doctors.map((d) => d._id));
 
     res.json({
       success: true,
-      data: doctorsWithCounts,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      data: doctors.map((d) => ({ ...d, patientCount: counts[String(d._id)] || 0 })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get single doctor by ID
-// @route   GET /api/doctors/:id
-// @access  Private
-export const getDoctorById = async (req, res, next) => {
-  try {
-    if (!isValidObjectId(req.params.id)) {
-      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
-    }
-
-    const doctor = await Doctor.findById(req.params.id).select('-__v');
-    if (!doctor) {
-      return res.status(404).json({
-        success: false,
-        message: 'Doctor not found',
-      });
-    }
-
-    const patientCount = await Patient.countDocuments({ doctor: doctor._id });
-
-    res.json({
-      success: true,
-      data: {
-        ...doctor.toObject(),
-        patientCount,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Create a new doctor
-// @route   POST /api/doctors
-// @access  Private
-export const createDoctor = async (req, res, next) => {
-  try {
-    const name = asString(req.body.name);
-    const specialization = asString(req.body.specialization);
-    const hospital = asString(req.body.hospital);
-    const phone = asString(req.body.phone);
-    const email = asString(req.body.email);
-    const bio = asString(req.body.bio);
-    const { status, experienceYears } = req.body;
-
-    if (!name.trim() || !specialization.trim() || !hospital.trim() || !phone.trim() || !email.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, specialization, hospital, phone, and email are required fields',
-      });
-    }
-
-    if (!isValidPhone(phone)) {
-      return res.status(400).json({ success: false, message: 'Please provide a valid phone number' });
-    }
-
-    const cleanEmail = email.toLowerCase().trim();
-    if (!isValidEmail(cleanEmail)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid email address',
-      });
-    }
-
-    const existingDoctor = await Doctor.findOne({ email: cleanEmail });
-    if (existingDoctor) {
-      return res.status(400).json({
-        success: false,
-        message: 'A doctor with this email address already exists',
-      });
-    }
-
-    const doctor = await Doctor.create({
-      name: sanitizeString(name),
-      specialization: sanitizeString(specialization),
-      hospital: sanitizeString(hospital),
-      phone: sanitizeString(phone),
-      email: cleanEmail,
-      status: DOCTOR_STATUSES.includes(status) ? status : 'Active',
-      experienceYears: parseBoundedInt(experienceYears, 0, 70) ?? 5,
-      bio: sanitizeString(bio, 1000),
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Doctor created successfully',
-      data: doctor,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Update doctor
-// @route   PUT /api/doctors/:id
-// @access  Private
-export const updateDoctor = async (req, res, next) => {
-  try {
-    if (!isValidObjectId(req.params.id)) {
-      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
-    }
-
-    const name = asString(req.body.name);
-    const specialization = asString(req.body.specialization);
-    const hospital = asString(req.body.hospital);
-    const phone = asString(req.body.phone);
-    const email = asString(req.body.email);
-    const { status, experienceYears, bio } = req.body;
-
-    let safeExperience;
-    if (experienceYears !== undefined && experienceYears !== '') {
-      safeExperience = parseBoundedInt(experienceYears, 0, 70);
-      if (safeExperience === null) {
-        return res.status(400).json({ success: false, message: 'Experience must be a number between 0 and 70' });
-      }
-    }
-
-    if (phone && !isValidPhone(phone)) {
-      return res.status(400).json({ success: false, message: 'Please provide a valid phone number' });
-    }
-
-    let doctor = await Doctor.findById(req.params.id);
-    if (!doctor) {
-      return res.status(404).json({
-        success: false,
-        message: 'Doctor not found',
-      });
-    }
-
-    // Check email format and uniqueness if changing email
-    let cleanEmail = doctor.email;
-    if (email) {
-      cleanEmail = email.toLowerCase().trim();
-      if (!isValidEmail(cleanEmail)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Please provide a valid email address',
-        });
-      }
-      if (cleanEmail !== doctor.email) {
-        const emailExists = await Doctor.findOne({ email: cleanEmail });
-        if (emailExists) {
-          return res.status(400).json({
-            success: false,
-            message: 'A doctor with this email address already exists',
-          });
-        }
-      }
-    }
-
-    doctor = await Doctor.findByIdAndUpdate(
-      req.params.id,
-      {
-        name: name ? sanitizeString(name) : doctor.name,
-        specialization: specialization ? sanitizeString(specialization) : doctor.specialization,
-        hospital: hospital ? sanitizeString(hospital) : doctor.hospital,
-        phone: phone ? sanitizeString(phone) : doctor.phone,
-        email: cleanEmail,
-        status: DOCTOR_STATUSES.includes(status) ? status : doctor.status,
-        experienceYears: safeExperience ?? doctor.experienceYears,
-        bio: typeof bio === 'string' ? sanitizeString(bio, 1000) : doctor.bio,
-      },
-      { new: true, runValidators: true }
-    );
-
-    res.json({
-      success: true,
-      message: 'Doctor updated successfully',
-      data: doctor,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Delete doctor (refused while patients are still assigned, so clinical records are never lost silently)
-// @route   DELETE /api/doctors/:id
-// @access  Private
-export const deleteDoctor = async (req, res, next) => {
-  try {
-    if (!isValidObjectId(req.params.id)) {
-      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
-    }
-
-    const doctor = await Doctor.findById(req.params.id).select('-__v');
-    if (!doctor) {
-      return res.status(404).json({
-        success: false,
-        message: 'Doctor not found',
-      });
-    }
-
-    const assignedPatients = await Patient.countDocuments({ doctor: doctor._id });
-    if (assignedPatients > 0) {
-      return res.status(409).json({
-        success: false,
-        message: `This doctor still has ${assignedPatients} assigned patient(s). Reassign or remove them before deleting the doctor.`,
-      });
-    }
-
-    await Doctor.findByIdAndDelete(doctor._id);
-
-    res.json({
-      success: true,
-      message: 'Doctor deleted successfully',
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    View corresponding patients for each doctor
-// @route   GET /api/doctors/:id/patients
-// @access  Private
-export const getDoctorPatients = async (req, res, next) => {
-  try {
-    if (!isValidObjectId(req.params.id)) {
-      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
-    }
-
-    const doctor = await Doctor.findById(req.params.id).select('-__v');
-    if (!doctor) {
-      return res.status(404).json({
-        success: false,
-        message: 'Doctor not found',
-      });
-    }
-
-    const { search, condition, status, page = 1, limit = 20 } = req.query;
-    const query = { doctor: doctor._id };
-
-    if (search && typeof search === 'string' && search.trim() !== '') {
-      const cleanSearch = escapeRegex(search.trim());
-      const regex = new RegExp(cleanSearch, 'i');
-      query.$or = [{ name: regex }, { condition: regex }, { phone: regex }];
-    }
-
-    if (typeof condition === 'string' && condition && condition !== 'all') {
-      query.condition = new RegExp(escapeRegex(condition), 'i');
-    }
-
-    if (typeof status === 'string' && PATIENT_STATUSES.includes(status)) {
-      query.status = status;
-    }
-
-    const safePage = Math.min(10000, Math.max(1, parseInt(page, 10) || 1));
-    const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
-    const skip = (safePage - 1) * safeLimit;
-
-    const [total, patients] = await Promise.all([
-      Patient.countDocuments(query),
-      Patient.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(safeLimit)
-        .select('-__v')
-        .lean(),
-    ]);
-
-    res.json({
-      success: true,
-      doctor: {
-        _id: doctor._id,
-        name: doctor.name,
-        specialization: doctor.specialization,
-        hospital: doctor.hospital,
-      },
-      data: patients,
-      pagination: {
-        page: safePage,
-        limit: safeLimit,
-        total,
-        totalPages: Math.ceil(total / safeLimit),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Add new patients under a specific doctor
-// @route   POST /api/doctors/:id/patients
-// @access  Private
-export const addPatientToDoctor = async (req, res, next) => {
-  try {
-    if (!isValidObjectId(req.params.id)) {
-      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
-    }
-
-    const doctor = await Doctor.findById(req.params.id).select('-__v');
-    if (!doctor) {
-      return res.status(404).json({
-        success: false,
-        message: 'Doctor not found',
-      });
-    }
-
-    const name = asString(req.body.name);
-    const condition = asString(req.body.condition);
-    const phone = asString(req.body.phone);
-    const email = asString(req.body.email).toLowerCase().trim();
-    const notes = asString(req.body.notes);
-    const { age, gender, status, admissionDate } = req.body;
-
-    if (!name.trim() || age === undefined || age === '' || !gender || !condition.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Patient name, age, gender, and condition are required',
-      });
-    }
-
-    const safeAge = parseBoundedInt(age, 0, 130);
-    if (safeAge === null) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid age between 0 and 130',
-      });
-    }
-
-    if (phone && !isValidPhone(phone)) {
-      return res.status(400).json({ success: false, message: 'Please provide a valid phone number' });
-    }
-
-    if (email && !isValidEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid patient email address',
-      });
-    }
-
-    const patient = await Patient.create({
-      name: sanitizeString(name),
-      age: safeAge,
-      gender: GENDERS.includes(gender) ? gender : 'Other',
-      condition: sanitizeString(condition),
-      status: PATIENT_STATUSES.includes(status) ? status : 'Stable',
-      phone: sanitizeString(phone),
-      email,
-      doctor: doctor._id,
-      notes: sanitizeString(notes, 2000),
-      admissionDate: admissionDate && !isNaN(new Date(admissionDate).getTime()) ? new Date(admissionDate) : new Date(),
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Patient added under doctor successfully',
-      data: patient,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Delete patients from the doctor's patient list
-// @route   DELETE /api/doctors/:id/patients/:patientId
-// @access  Private
-export const deletePatientFromDoctor = async (req, res, next) => {
-  try {
-    const { id: doctorId, patientId } = req.params;
-
-    if (!isValidObjectId(doctorId, patientId)) {
-      return res.status(400).json({ success: false, message: 'Invalid doctor or patient ID format' });
-    }
-
-    const patient = await Patient.findOne({ _id: patientId, doctor: doctorId });
-    if (!patient) {
-      return res.status(404).json({
-        success: false,
-        message: 'Patient not found under this doctor',
-      });
-    }
-
-    await Patient.findByIdAndDelete(patientId);
-
-    res.json({
-      success: true,
-      message: 'Patient removed from doctor roster successfully',
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Distinct filter values (specializations, hospitals) for the doctor filters
-// @route   GET /api/doctors/filters
-// @access  Private
+// @route GET /api/doctors/filters
 export const getDoctorFilters = async (req, res, next) => {
   try {
-    const [specializations, hospitals] = await Promise.all([
-      Doctor.distinct('specialization'),
-      Doctor.distinct('hospital'),
-    ]);
-    res.json({
-      success: true,
-      data: {
-        specializations: specializations.sort(),
-        hospitals: hospitals.sort(),
-      },
-    });
+    const [specializations, hospitals] = await Promise.all([Doctor.distinct('specialization'), Doctor.distinct('hospital')]);
+    res.json({ success: true, data: { specializations: specializations.sort(), hospitals: hospitals.sort() } });
   } catch (error) {
     next(error);
   }
 };
+
+// @route GET /api/doctors/:id  — profile with caseload, status breakdown and shifts
+export const getDoctorById = async (req, res, next) => {
+  try {
+    if (!isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+    const doctor = await Doctor.findById(req.params.id).select('-__v').lean();
+    if (!doctor) return res.status(404).json({ success: false, message: 'Doctor not found' });
+
+    const now = new Date();
+    const [byStatus, onCall, nextShift] = await Promise.all([
+      Patient.aggregate([{ $match: { doctor: doctor._id, archivedAt: null } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Shift.findOne({ doctor: doctor._id, start: { $lte: now }, end: { $gt: now } }).lean(),
+      Shift.findOne({ doctor: doctor._id, start: { $gt: now } }).sort({ start: 1 }).lean(),
+    ]);
+    const statusCounts = Object.fromEntries(byStatus.map((s) => [s._id, s.count]));
+    const patientCount = PATIENT_STATUSES.filter((s) => s !== 'Discharged').reduce((sum, s) => sum + (statusCounts[s] || 0), 0);
+
+    res.json({ success: true, data: { ...doctor, patientCount, statusCounts, currentShift: onCall, nextShift } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @route POST /api/doctors   (admin)
+export const createDoctor = async (req, res, next) => {
+  try {
+    const { fields, error } = readDoctorFields(req.body, { requireCore: true });
+    if (error) return res.status(400).json({ success: false, message: error });
+    if (await Doctor.exists({ email: fields.email })) {
+      return res.status(400).json({ success: false, message: 'A doctor with this email address already exists' });
+    }
+    const doctor = await Doctor.create({ status: 'Active', experienceYears: 5, ...fields });
+    res.status(201).json({ success: true, message: 'Doctor created successfully', data: doctor });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @route PUT /api/doctors/:id   (admin)
+export const updateDoctor = async (req, res, next) => {
+  try {
+    if (!isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+    const doctor = await Doctor.findById(req.params.id);
+    if (!doctor) return res.status(404).json({ success: false, message: 'Doctor not found' });
+    const { fields, error } = readDoctorFields(req.body, { requireCore: false });
+    if (error) return res.status(400).json({ success: false, message: error });
+    if (fields.email && fields.email !== doctor.email && (await Doctor.exists({ email: fields.email }))) {
+      return res.status(400).json({ success: false, message: 'A doctor with this email address already exists' });
+    }
+    Object.assign(doctor, fields);
+    await doctor.save();
+    res.json({ success: true, message: 'Doctor updated successfully', data: doctor });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @route DELETE /api/doctors/:id   (admin) — refused while any patient (incl. archived) still points to this doctor
+export const deleteDoctor = async (req, res, next) => {
+  try {
+    if (!isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+    const doctor = await Doctor.findById(req.params.id);
+    if (!doctor) return res.status(404).json({ success: false, message: 'Doctor not found' });
+    const assigned = await Patient.countDocuments({ doctor: doctor._id });
+    if (assigned > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `This doctor still has ${assigned} patient record(s). Reassign them to another doctor first.`,
+        assigned,
+      });
+    }
+    await Promise.all([Doctor.deleteOne({ _id: doctor._id }), Shift.deleteMany({ doctor: doctor._id })]);
+    res.json({ success: true, message: 'Doctor deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @route POST /api/doctors/:id/reassign   { doctor }   (admin) — moves every patient to another doctor
+export const reassignDoctorPatients = async (req, res, next) => {
+  try {
+    const target = asString(req.body.doctor);
+    if (!isValidObjectId(req.params.id) || !isValidObjectId(target)) {
+      return res.status(400).json({ success: false, message: 'Choose the doctor who takes over these patients' });
+    }
+    if (target === req.params.id) return res.status(400).json({ success: false, message: 'Choose a different doctor' });
+    const [from, to] = await Promise.all([Doctor.findById(req.params.id), Doctor.findById(target)]);
+    if (!from || !to) return res.status(404).json({ success: false, message: 'Doctor not found' });
+
+    const patients = await Patient.find({ doctor: from._id }).select('name doctor');
+    await Patient.updateMany({ doctor: from._id }, { doctor: to._id });
+    await logActivities(
+      req,
+      patients.map((p) => ({ type: 'patient.transferred', patient: p, doctors: [from._id, to._id], from: from.name, to: to.name, note: 'Caseload reassigned' }))
+    );
+    res.json({ success: true, message: `${patients.length} patient(s) moved to ${to.name}`, moved: patients.length });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @route GET /api/doctors/:id/patients   — a doctor login may only open its own roster
+export const getDoctorPatients = async (req, res, next) => {
+  try {
+    if (!isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+    if (!canAccessDoctor(req, req.params.id)) return res.status(403).json({ success: false, message: 'You can only view your own patients' });
+    const doctor = await Doctor.findById(req.params.id).select('name specialization hospital');
+    if (!doctor) return res.status(404).json({ success: false, message: 'Doctor not found' });
+
+    const { search, condition, status } = req.query;
+    const query = { doctor: doctor._id, archivedAt: null };
+    if (typeof search === 'string' && search.trim()) {
+      const rx = new RegExp(escapeRegex(search), 'i');
+      query.$or = [{ name: rx }, { condition: rx }, { phone: rx }];
+    }
+    if (typeof condition === 'string' && condition && condition !== 'all') query.condition = new RegExp(escapeRegex(condition), 'i');
+    if (typeof status === 'string' && PATIENT_STATUSES.includes(status)) query.status = status;
+
+    const page = Math.min(10000, Math.max(1, parseInt(req.query.page, 10) || 1));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const [total, patients] = await Promise.all([
+      Patient.countDocuments(query),
+      Patient.find(query).sort({ createdAt: -1, _id: 1 }).skip((page - 1) * limit).limit(limit).select('-__v').lean(),
+    ]);
+    res.json({ success: true, doctor, data: patients, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @route POST /api/doctors/:id/patients   — admit under this doctor (admin, or the doctor themselves)
+export const addPatientToDoctor = async (req, res, next) => {
+  if (!isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+  if (!canAccessDoctor(req, req.params.id)) return res.status(403).json({ success: false, message: 'You can only admit patients under yourself' });
+  req.body = { ...req.body, doctor: req.params.id };
+  return createPatient(req, res, next);
+};
+
+// @route DELETE /api/doctors/:id/patients/:patientId   (admin) — removes from the list by archiving (restorable)
+export const deletePatientFromDoctor = async (req, res, next) => {
+  const { id: doctorId, patientId } = req.params;
+  if (!isValidObjectId(doctorId, patientId)) return res.status(400).json({ success: false, message: 'Invalid doctor or patient ID format' });
+  const belongs = await Patient.exists({ _id: patientId, doctor: doctorId, archivedAt: null }).catch(() => null);
+  if (!belongs) return res.status(404).json({ success: false, message: 'Patient not found under this doctor' });
+  req.params = { id: patientId };
+  return archivePatient(req, res, next);
+};
+

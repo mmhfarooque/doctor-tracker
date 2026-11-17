@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 import User from '../models/User.js';
 import Doctor from '../models/Doctor.js';
 import Patient from '../models/Patient.js';
+import Activity from '../models/Activity.js';
+import Shift from '../models/Shift.js';
 
 dotenv.config();
 
@@ -102,22 +104,22 @@ const patientDataTemplates = [
   { name: 'James Wilson', age: 67, gender: 'Male', condition: 'Post-Stroke Rehabilitation', status: 'Recovering', phone: '+1 555-222-5566', email: 'jwilson@example.com', monthOffset: 1 },
 
   // Pediatrics
-  { name: 'Oliver Brown', age: 7, gender: 'Male', condition: 'Pediatric Asthma', status: 'Stable', phone: '+1 555-333-1122', email: 'parents.brown@example.com', monthOffset: 4 },
+  { name: 'Oliver Brown', age: 7, gender: 'Male', condition: 'Pediatric Asthma', status: 'Discharged', phone: '+1 555-333-1122', email: 'parents.brown@example.com', monthOffset: 4 },
   { name: 'Emma Johnson', age: 4, gender: 'Female', condition: 'Acute Bronchitis', status: 'Recovering', phone: '+1 555-333-3344', email: 'emma.parents@example.com', monthOffset: 2 },
   { name: 'Lucas Davis', age: 11, gender: 'Male', condition: 'Type 1 Diabetes (Juvenile)', status: 'Stable', phone: '+1 555-333-5566', email: 'davis.family@example.com', monthOffset: 0 },
 
   // Orthopedics
-  { name: 'Daniel Miller', age: 32, gender: 'Male', condition: 'Anterior Cruciate Ligament (ACL) Tear', status: 'Recovering', phone: '+1 555-444-1122', email: 'dmiller@example.com', monthOffset: 4 },
+  { name: 'Daniel Miller', age: 32, gender: 'Male', condition: 'Anterior Cruciate Ligament (ACL) Tear', status: 'Discharged', phone: '+1 555-444-1122', email: 'dmiller@example.com', monthOffset: 4 },
   { name: 'Olivia Garcia', age: 61, gender: 'Female', condition: 'Severe Osteoarthritis', status: 'Stable', phone: '+1 555-444-3344', email: 'olivia.g@example.com', monthOffset: 3 },
   { name: 'Henry Thomas', age: 48, gender: 'Male', condition: 'Lumbar Disc Herniation', status: 'Under Observation', phone: '+1 555-444-5566', email: 'hthomas@example.com', monthOffset: 1 },
 
   // Endocrinology
-  { name: 'Charlotte Harris', age: 45, gender: 'Female', condition: 'Type 2 Diabetes Mellitus', status: 'Stable', phone: '+1 555-555-1122', email: 'charlotte.h@example.com', monthOffset: 5 },
+  { name: 'Charlotte Harris', age: 45, gender: 'Female', condition: 'Type 2 Diabetes Mellitus', status: 'Discharged', phone: '+1 555-555-1122', email: 'charlotte.h@example.com', monthOffset: 5 },
   { name: 'Ethan Clark', age: 53, gender: 'Male', condition: 'Hypothyroidism', status: 'Stable', phone: '+1 555-555-3344', email: 'ethan.clark@example.com', monthOffset: 3 },
   { name: 'Mia Robinson', age: 38, gender: 'Female', condition: 'Hashimoto Thyroiditis', status: 'Under Observation', phone: '+1 555-555-5566', email: 'mia.robinson@example.com', monthOffset: 0 },
 
   // Dermatology
-  { name: 'Alexander Wright', age: 29, gender: 'Male', condition: 'Severe Atopic Dermatitis', status: 'Stable', phone: '+1 555-666-1122', email: 'awright@example.com', monthOffset: 4 },
+  { name: 'Alexander Wright', age: 29, gender: 'Male', condition: 'Severe Atopic Dermatitis', status: 'Discharged', phone: '+1 555-666-1122', email: 'awright@example.com', monthOffset: 4 },
   { name: 'Amelia King', age: 34, gender: 'Female', condition: 'Plaque Psoriasis', status: 'Stable', phone: '+1 555-666-3344', email: 'amelia.king@example.com', monthOffset: 2 },
 
   // Oncology
@@ -148,56 +150,42 @@ const seedDB = async () => {
 
     // 1. Clear existing collections
     console.log('[Seeder] Clearing old records...');
-    await Promise.all([
-      User.deleteMany({}),
-      Doctor.deleteMany({}),
-      Patient.deleteMany({}),
-    ]);
+    await Promise.all([User.deleteMany({}), Doctor.deleteMany({}), Patient.deleteMany({}), Activity.deleteMany({}), Shift.deleteMany({})]);
 
     // Make the live indexes match the schemas exactly (drops stale ones such as old text indexes)
     console.log('[Seeder] Syncing indexes...');
-    await Promise.all([User.syncIndexes(), Doctor.syncIndexes(), Patient.syncIndexes()]);
+    await Promise.all([User.syncIndexes(), Doctor.syncIndexes(), Patient.syncIndexes(), Activity.syncIndexes(), Shift.syncIndexes()]);
 
-    // 2. Create Admin user
-    console.log('[Seeder] Creating admin user...');
-    const admin = await User.create({
-      name: 'System Admin',
-      email: 'admin@doctortracker.com',
-      password: 'Password123!',
-      role: 'admin',
-    });
-    console.log(`[Seeder] Admin created: ${admin.email} (Password: Password123!)`);
-
-    // 3. Create Doctors
-    console.log('[Seeder] Seeding doctors...');
-    const createdDoctors = await Doctor.insertMany(sampleDoctors);
+    // 2. Doctors (capacity = max active patients; Cardiology is deliberately at capacity)
+    const capacity = { Cardiology: 4, Neurology: 6, Pediatrics: 8, Orthopedics: 6, Endocrinology: 8, Dermatology: 10, Oncology: 5, 'General Surgery': 6 };
+    const createdDoctors = await Doctor.insertMany(sampleDoctors.map((d) => ({ ...d, maxPatients: capacity[d.specialization] || 10 })));
     console.log(`[Seeder] Seeded ${createdDoctors.length} doctors.`);
+    const bySpecialty = Object.fromEntries(createdDoctors.map((d) => [d.specialization, d]));
 
-    // 4. Map and seed patients
-    console.log('[Seeder] Seeding patients with realistic timelines...');
-    const specialtyDoctorMap = {};
-    createdDoctors.forEach((doc) => {
-      specialtyDoctorMap[doc.specialization] = doc._id;
-    });
+    // 3. Users: one per role. The doctor login belongs to Dr. Sarah Jenkins (Cardiology).
+    const PASSWORD = 'Password123!';
+    const [admin, doctorUser, nurse] = await User.create([
+      { name: 'System Admin', email: 'admin@doctortracker.com', password: PASSWORD, role: 'admin' },
+      { name: 'Dr. Sarah Jenkins', email: 'doctor@doctortracker.com', password: PASSWORD, role: 'doctor', doctor: bySpecialty.Cardiology._id },
+      { name: 'Nina Patel (Nurse)', email: 'nurse@doctortracker.com', password: PASSWORD, role: 'nurse' },
+    ]);
+    console.log('[Seeder] Created admin, doctor and nurse logins.');
 
+    // 4. Patients — admission dates always in the past; follow-ups spread across overdue / today / this week
+    const DAY = 86400000;
     const now = new Date();
+    const today = new Date(now);
+    today.setHours(10, 0, 0, 0);
+    const doctorFor = (i) =>
+      i < 4 ? 'Cardiology' : i < 7 ? 'Neurology' : i < 10 ? 'Pediatrics' : i < 13 ? 'Orthopedics' : i < 16 ? 'Endocrinology' : i < 18 ? 'Dermatology' : i < 21 ? 'Oncology' : 'General Surgery';
+    const followUpOffsets = { 0: -3, 3: 0, 4: 2, 6: -1, 9: 5, 11: 0, 14: 3, 17: 9, 19: 1, 20: -6, 22: 4 };
+
     const patientsToInsert = patientDataTemplates.map((p, index) => {
-      // Find doctor by matching specialty or round robin
-      let assignedDoctorId;
-      if (index < 4) assignedDoctorId = specialtyDoctorMap['Cardiology'];
-      else if (index < 7) assignedDoctorId = specialtyDoctorMap['Neurology'];
-      else if (index < 10) assignedDoctorId = specialtyDoctorMap['Pediatrics'];
-      else if (index < 13) assignedDoctorId = specialtyDoctorMap['Orthopedics'];
-      else if (index < 16) assignedDoctorId = specialtyDoctorMap['Endocrinology'];
-      else if (index < 18) assignedDoctorId = specialtyDoctorMap['Dermatology'];
-      else if (index < 21) assignedDoctorId = specialtyDoctorMap['Oncology'];
-      else assignedDoctorId = specialtyDoctorMap['General Surgery'];
-
-      // Calculate realistic past admission date based on monthOffset
-      const admissionDate = new Date(now);
-      admissionDate.setMonth(admissionDate.getMonth() - p.monthOffset);
-      admissionDate.setDate(Math.max(1, (index * 3) % 28 + 1));
-
+      const admissionDate = new Date(now.getFullYear(), now.getMonth() - p.monthOffset, 1 + ((index * 3) % 27), 9, 30);
+      if (admissionDate > now) admissionDate.setTime(now.getTime() - (index + 1) * DAY);
+      const discharged = p.status === 'Discharged';
+      const dischargeDate = discharged ? new Date(Math.min(now.getTime() - DAY, admissionDate.getTime() + (4 + (index % 9)) * DAY)) : null;
+      const offset = followUpOffsets[index];
       return {
         name: p.name,
         age: p.age,
@@ -206,20 +194,67 @@ const seedDB = async () => {
         status: p.status,
         phone: p.phone,
         email: p.email,
-        doctor: assignedDoctorId,
+        doctor: bySpecialty[doctorFor(index)]._id,
         admissionDate,
+        dischargeDate,
+        followUpDate: !discharged && offset !== undefined ? new Date(today.getTime() + offset * DAY) : null,
         notes: `Initial diagnosis recorded at admission. Standard care protocol initiated for ${p.condition}.`,
       };
     });
-
     const createdPatients = await Patient.insertMany(patientsToInsert);
     console.log(`[Seeder] Seeded ${createdPatients.length} patients.`);
 
+    // 5. History: admission + a realistic status path for each patient, so timelines and alerts have data
+    const actorAdmin = { id: admin._id, name: admin.name, role: 'admin' };
+    const actorDoctor = { id: doctorUser._id, name: doctorUser.name, role: 'doctor' };
+    const actorNurse = { id: nurse._id, name: nurse.name, role: 'nurse' };
+    const docName = Object.fromEntries(createdDoctors.map((d) => [String(d._id), d.name]));
+    const events = [];
+    createdPatients.forEach((p, i) => {
+      const base = p.admissionDate.getTime();
+      const at = (days) => new Date(Math.min(now.getTime() - 60000 * (i + 1), base + days * DAY));
+      events.push({ type: 'patient.admitted', patient: p._id, patientName: p.name, doctors: [p.doctor], actor: actorAdmin, to: 'Under Observation', note: `Admitted under ${docName[String(p.doctor)]}`, createdAt: new Date(base) });
+      if (p.status !== 'Under Observation') {
+        const path = p.status === 'Critical' ? ['Critical'] : p.status === 'Recovering' ? ['Stable', 'Recovering'] : p.status === 'Discharged' ? ['Stable', 'Discharged'] : ['Stable'];
+        let from = 'Under Observation';
+        path.forEach((to, k) => {
+          const actor = String(p.doctor) === String(bySpecialty.Cardiology._id) ? actorDoctor : k % 2 ? actorAdmin : actorNurse;
+          const when = to === 'Critical' ? new Date(now.getTime() - (i % 5 + 1) * 3600000) : to === 'Discharged' ? p.dischargeDate : at(2 + k * 2);
+          events.push({ type: 'patient.status', patient: p._id, patientName: p.name, doctors: [p.doctor], actor, from, to, createdAt: when });
+          from = to;
+        });
+      }
+      if (p.followUpDate) {
+        events.push({ type: 'patient.followup', patient: p._id, patientName: p.name, doctors: [p.doctor], actor: actorNurse, to: p.followUpDate.toISOString().slice(0, 10), note: 'Follow-up scheduled', createdAt: at(1) });
+      }
+    });
+    await Activity.insertMany(events);
+    console.log(`[Seeder] Seeded ${events.length} history events.`);
+
+    // 6. Shifts for this week and next: rotating Day / Evening / Night / On-call so someone is always on call
+    const types = { Day: [8, 8], Evening: [16, 8], Night: [0, 8], 'On-call': [8, 24] };
+    const monday = new Date(now);
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const rota = ['Day', 'Evening', 'Night', 'Day', 'On-call', 'Day', 'Evening'];
+    const shifts = [];
+    for (let day = 0; day < 14; day++) {
+      createdDoctors.forEach((doc, di) => {
+        if ((day + di) % 7 === 6) return; // one day off per week
+        const type = rota[(day + di) % 7];
+        const [h, len] = types[type];
+        const start = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + day, h);
+        shifts.push({ doctor: doc._id, type, start, end: new Date(start.getTime() + len * 3600000) });
+      });
+    }
+    await Shift.insertMany(shifts);
+    console.log(`[Seeder] Seeded ${shifts.length} shifts.`);
+
     console.log('----------------------------------------------------');
-    console.log(' Database seeded successfully!');
-    console.log(' Admin Credentials:');
-    console.log('   Email:    admin@doctortracker.com');
-    console.log('   Password: Password123!');
+    console.log(' Database seeded. Logins (password for all: Password123!):');
+    console.log('   admin@doctortracker.com   — Administrator');
+    console.log('   doctor@doctortracker.com  — Dr. Sarah Jenkins (sees only her patients)');
+    console.log('   nurse@doctortracker.com   — Nurse (status, notes, follow-ups)');
     console.log('----------------------------------------------------');
 
     await mongoose.disconnect();

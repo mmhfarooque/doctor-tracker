@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
-import { isValidEmail, sanitizeString } from '../utils/sanitize.js';
+import { isValidEmail } from '../utils/sanitize.js';
 import { JWT_EXPIRES_IN } from '../config/envCheck.js';
 
 // Real bcrypt hash generated at startup, used to equalize execution time on non-existent accounts
@@ -54,6 +54,7 @@ export const login = async (req, res, next) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          doctor: user.doctor,
           token: generateToken(user._id),
         },
       });
@@ -69,70 +70,12 @@ export const login = async (req, res, next) => {
   }
 };
 
-// @desc    Register a new user (admin) — only an authenticated admin can create another admin
-// @route   POST /api/auth/register
-// @access  Private
-export const register = async (req, res, next) => {
-  try {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password || typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide name, email, and password',
-      });
-    }
-
-    const cleanEmail = email.toLowerCase().trim().slice(0, 100);
-    if (!isValidEmail(cleanEmail)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide a valid email address',
-      });
-    }
-
-    if (password.length < 8 || password.length > 128 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be 8–128 characters and include at least one letter and one number',
-      });
-    }
-
-    const userExists = await User.findOne({ email: cleanEmail });
-    if (userExists) {
-      return res.status(400).json({
-        success: false,
-        message: 'A user with this email already exists',
-      });
-    }
-
-    const user = await User.create({
-      name: sanitizeString(name, 100),
-      email: cleanEmail,
-      password,
-    });
-
-    res.status(201).json({
-      success: true,
-      data: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        token: generateToken(user._id),
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 // @desc    Get current user profile
 // @route   GET /api/auth/me
 // @access  Private
 export const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).select('-password -__v');
+    const user = await User.findById(req.user._id).select('-password -__v').populate('doctor', 'name specialization');
     if (!user) {
       return res.status(404).json({
         success: false,

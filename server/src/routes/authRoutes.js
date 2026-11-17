@@ -1,11 +1,12 @@
 import express from 'express';
-import { login, register, getMe } from '../controllers/authController.js';
-import { protect } from '../middleware/auth.js';
+import { login, getMe } from '../controllers/authController.js';
+import { createUser } from '../controllers/userController.js';
+import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
 
 router.post('/login', login);
-router.post('/register', protect, register);
+router.post('/register', protect, authorize('admin'), createUser); // only admins create accounts
 router.get('/me', protect, getMe);
 
 export default router;

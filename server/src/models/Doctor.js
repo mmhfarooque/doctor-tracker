@@ -45,6 +45,13 @@ const doctorSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Maximum number of active (not discharged, not archived) patients before the doctor is flagged as overloaded
+    maxPatients: {
+      type: Number,
+      default: 10,
+      min: [1, 'Capacity must be at least 1'],
+      max: [200, 'Capacity cannot exceed 200'],
+    },
   },
   {
     timestamps: true,
