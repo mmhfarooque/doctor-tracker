@@ -73,11 +73,7 @@ export const AuthProvider = ({ children }) => {
     router.replace('/login');
   };
 
-  return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ user, token, loading, login, logout }}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

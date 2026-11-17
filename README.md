@@ -142,6 +142,17 @@ flowchart TD
 
 ---
 
+## UI design
+
+* **Status colour is information, not decoration.** Five clinical-status colours are used only for patient status, so red always means critical. Everything else uses a calm pine and grey palette.
+* **One place for the account.** The signed-in admin and *Sign out* live together in the sidebar account menu.
+* **Fast navigation.** Ctrl/⌘ K opens a quick search across doctors and patients; dashboard figures link straight into the matching filtered list.
+* **Forms never leave the list.** Create and edit happen in a side panel; deletes need confirmation; every save shows a short confirmation message.
+* **Responsive.** Tables switch to cards under 768 px; no page scrolls sideways at 390 px. Keyboard focus is visible and reduced-motion preferences are respected.
+* Typeface: IBM Plex Sans (self-hosted via `@fontsource`), with tabular figures for numbers.
+
+---
+
 ## 5. Visual Evidence
 
 Screenshots are in [`docs/screenshots/`](docs/screenshots) (desktop 1440×900, mobile 390×844).
@@ -151,14 +162,14 @@ Screenshots are in [`docs/screenshots/`](docs/screenshots) (desktop 1440×900, m
 |---|---|
 | <img src="docs/screenshots/dashboard-desktop.png" width="620" alt="Dashboard desktop"> | <img src="docs/screenshots/dashboard-mobile.png" width="200" alt="Dashboard mobile"> |
 
-KPI cards, monthly admission timeline, patients-per-doctor caseload, specialty distribution, patient status breakdown and recent admissions.
+The lead element is the clinical-status bar: every patient on one bar, split into Critical, Under observation, Recovering, Stable and Discharged. Each segment opens the patient list filtered to that status. Below it: key figures, admissions over the last 12 months, patients by specialty, caseload per doctor and recent admissions.
 
 ### Doctors
 | Desktop | Mobile |
 |---|---|
 | <img src="docs/screenshots/doctors-desktop.png" width="620" alt="Doctors desktop"> | <img src="docs/screenshots/doctors-mobile.png" width="200" alt="Doctors mobile"> |
 
-Search, specialty / status / date-range filters, server-side pagination, add doctor, add patient under a doctor.
+Search, specialty / availability / hospital / joined-date filters with removable filter chips, sorting, server-side pagination, add and edit doctors in a side panel, admit a patient under a doctor from the row menu.
 
 ### Doctor Profile & Patient Roster
 | Desktop | Mobile |
@@ -170,7 +181,12 @@ Search, specialty / status / date-range filters, server-side pagination, add doc
 |---|---|
 | <img src="docs/screenshots/patients-desktop.png" width="620" alt="Patients desktop"> | <img src="docs/screenshots/patients-mobile.png" width="200" alt="Patients mobile"> |
 
-Full patient list with search, condition / status / doctor / admission-date filters, edit and delete.
+Status tabs, search, doctor / condition / admission-date filters, sorting and pagination. Select a row to edit in a side panel; delete asks for confirmation. Tables become cards on phones.
+
+### Everyday interactions
+| Edit in a side panel | Quick search (Ctrl/⌘ K) | Account menu |
+|---|---|---|
+| <img src="docs/screenshots/patient-drawer-desktop.png" width="300" alt="Edit patient drawer"> | <img src="docs/screenshots/search-palette-desktop.png" width="300" alt="Quick search"> | <img src="docs/screenshots/account-menu-desktop.png" width="300" alt="Account menu"> |
 
 ### Login
 | Desktop | Mobile |
@@ -195,9 +211,10 @@ Doctor Tracker/
 │   │   │   │   └── [id]/page.jsx        # Doctor Detail & Patient Roster
 │   │   │   └── patients/page.jsx        # Dedicated Patients View (Edit/Delete/Filter)
 │   │   ├── components/
-│   │   │   ├── common/                  # Modal, Pagination
-│   │   │   ├── dashboard/               # StatCard, AnalyticsCharts (Recharts)
-│   │   │   └── layout/                  # Sidebar, Navbar, AppLayout
+│   │   │   ├── ui/                      # Drawer, ConfirmDialog, Menu, Toast, Pagination, StatusBadge, Avatar, …
+│   │   │   ├── forms/                   # DoctorForm, PatientForm (side-panel forms)
+│   │   │   ├── dashboard/               # WardStatus, AdmissionsChart (Recharts), BarList
+│   │   │   └── layout/                  # AppShell, Sidebar + account menu, CommandPalette, Logo
 │   │   ├── context/                     # AuthContext with Route Guards
 │   │   ├── hooks/                       # useDebounce (search inputs)
 │   │   └── lib/                         # Axios client instance & interceptors

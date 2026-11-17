@@ -1,18 +1,29 @@
+import '@fontsource/ibm-plex-sans/latin-400.css';
+import '@fontsource/ibm-plex-sans/latin-500.css';
+import '@fontsource/ibm-plex-sans/latin-600.css';
+import '@fontsource/ibm-plex-sans/latin-700.css';
 import './globals.css';
 import { AuthProvider } from '../context/AuthContext';
-import AppLayout from '../components/layout/AppLayout';
+import { ToastProvider } from '../components/ui/Toast';
+import AppShell from '../components/layout/AppShell';
 
 export const metadata = {
-  title: 'Doctor Tracker — Healthcare Administrative Portal',
-  description: 'High-performance medical administrative dashboard to manage doctors and corresponding patients.',
+  title: 'Doctor Tracker',
+  description: 'Manage doctors, their patients and clinical activity in one place.',
+};
+
+export const viewport = {
+  themeColor: '#112620',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className="bg-slate-50 antialiased text-slate-800">
+      <body>
         <AuthProvider>
-          <AppLayout>{children}</AppLayout>
+          <ToastProvider>
+            <AppShell>{children}</AppShell>
+          </ToastProvider>
         </AuthProvider>
       </body>
     </html>

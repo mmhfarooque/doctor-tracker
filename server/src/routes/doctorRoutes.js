@@ -8,6 +8,7 @@ import {
   getDoctorPatients,
   addPatientToDoctor,
   deletePatientFromDoctor,
+  getDoctorFilters,
 } from '../controllers/doctorController.js';
 import { protect } from '../middleware/auth.js';
 
@@ -18,6 +19,8 @@ router.use(protect); // Require authentication for all doctor routes
 router.route('/')
   .get(getDoctors)
   .post(createDoctor);
+
+router.get('/filters', getDoctorFilters); // must be registered before '/:id'
 
 router.route('/:id')
   .get(getDoctorById)

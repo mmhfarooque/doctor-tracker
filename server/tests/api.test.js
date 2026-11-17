@@ -144,6 +144,13 @@ test('removes the patient from the doctor roster, then the doctor can be deleted
   assert.equal(res.status, 200);
 });
 
+test('doctor filter options list distinct values', async () => {
+  const res = await api('GET', '/doctors/filters');
+  assert.equal(res.status, 200);
+  assert.ok(Array.isArray(res.body.data.specializations));
+  assert.ok(Array.isArray(res.body.data.hospitals));
+});
+
 test('invalid ObjectId returns 400', async () => {
   const res = await api('GET', '/patients/not-an-id');
   assert.equal(res.status, 400);
