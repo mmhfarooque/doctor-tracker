@@ -1,0 +1,24 @@
+# Render Blueprint — Doctor Tracker REST API
+# Secrets are marked sync:false so they are entered in the Render dashboard, never committed.
+services:
+  - type: web
+    name: doctor-tracker-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CLIENT_URL
+        sync: false

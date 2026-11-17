@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import api from '../lib/api';
 
 const AuthContext = createContext(null);
@@ -11,6 +11,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     try {
@@ -35,12 +36,12 @@ export const AuthProvider = ({ children }) => {
     if (!loading && typeof window !== 'undefined') {
       const isPublicRoute = pathname === '/login';
       if (!user && !isPublicRoute) {
-        window.location.href = '/login';
+        router.replace('/login');
       } else if (user && isPublicRoute) {
-        window.location.href = '/';
+        router.replace('/');
       }
     }
-  }, [user, loading, pathname]);
+  }, [user, loading, pathname, router]);
 
   const login = async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
@@ -54,7 +55,7 @@ export const AuthProvider = ({ children }) => {
       }
       setToken(receivedToken);
       setUser(userData);
-      window.location.href = '/';
+      router.replace('/');
       return { success: true };
     }
     return { success: false, message: response.data.message };
@@ -69,7 +70,7 @@ export const AuthProvider = ({ children }) => {
     }
     setToken(null);
     setUser(null);
-    window.location.href = '/login';
+    router.replace('/login');
   };
 
   return (

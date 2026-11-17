@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "seed": "node src/scripts/seed.js"
+    "seed": "node src/scripts/seed.js",
+    "test": "node --test tests/*.test.js",
+    "sync-indexes": "node src/scripts/syncIndexes.js"
   },
   "keywords": [
     "express",
@@ -28,5 +30,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
     "morgan": "^1.10.0"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

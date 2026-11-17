@@ -1,3 +1,27 @@
+const isDev = process.env.NODE_ENV !== 'production';
+
+// Only the configured API origin may be contacted (instead of any https: host)
+let apiOrigin = 'http://localhost:5000';
+try {
+  apiOrigin = new URL(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').origin;
+} catch {
+  // keep the localhost default
+}
+
+const csp = [
+  "default-src 'self'",
+  // Next.js needs inline bootstrap scripts; 'unsafe-eval' is only required by the dev server (Fast Refresh)
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  `connect-src 'self' ${apiOrigin}${isDev ? ' ws: http://127.0.0.1:5000' : ''}`,
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join('; ');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -25,7 +49,7 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:5000 http://127.0.0.1:5000 https:; frame-ancestors 'none';",
+            value: csp,
           },
         ],
       },

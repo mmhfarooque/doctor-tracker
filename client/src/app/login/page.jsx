@@ -4,6 +4,9 @@ import React, { useState } from 'react';
 import { HeartPulse, Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
+// Demo credentials box is for reviewers; hide it on a real deployment with NEXT_PUBLIC_SHOW_DEMO_LOGIN=false
+const SHOW_DEMO_LOGIN = process.env.NEXT_PUBLIC_SHOW_DEMO_LOGIN !== 'false';
+
 export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
@@ -50,21 +53,24 @@ export default function LoginPage() {
         </div>
 
         {/* Demo Credentials Callout */}
-        <div className="mt-6 rounded-2xl border border-teal-200 bg-teal-50/80 p-3.5 text-xs text-teal-900">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-teal-800">Demo Admin Access</span>
-            <button
-              type="button"
-              onClick={handleFillDemo}
-              className="rounded-lg bg-teal-600 px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-teal-700"
-            >
-              Fill Credentials
-            </button>
+        {SHOW_DEMO_LOGIN && (
+          <div className="mt-6 rounded-2xl border border-teal-200 bg-teal-50/80 p-3.5 text-xs text-teal-900">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-teal-800">Demo Admin Access</span>
+              <button
+                type="button"
+                onClick={handleFillDemo}
+                className="rounded-lg bg-teal-600 px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-teal-700"
+              >
+                Fill Credentials
+              </button>
+            </div>
+            <p className="mt-1 text-teal-700 text-[11px]">
+              Email: <code className="font-mono font-semibold">admin@doctortracker.com</code> | Pass:{' '}
+              <code className="font-mono font-semibold">Password123!</code>
+            </p>
           </div>
-          <p className="mt-1 text-teal-700 text-[11px]">
-            Email: <code className="font-mono font-semibold">admin@doctortracker.com</code> | Pass: <code className="font-mono font-semibold">Password123!</code>
-          </p>
-        </div>
+        )}
 
         {/* Error Alert */}
         {error && (

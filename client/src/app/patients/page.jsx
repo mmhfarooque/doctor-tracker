@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
   Search,
@@ -17,6 +17,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import api from '../../lib/api';
+import useDebounce from '../../hooks/useDebounce';
 import Modal from '../../components/common/Modal';
 import Pagination from '../../components/common/Pagination';
 
@@ -28,6 +29,8 @@ export default function PatientsPage() {
 
   // Search & Filters
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
+  const requestSeq = useRef(0); // ignore responses from requests that a newer one has superseded
   const [conditionFilter, setConditionFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [doctorFilter, setDoctorFilter] = useState('all');
@@ -82,6 +85,7 @@ export default function PatientsPage() {
 
   // Fetch Patients
   const fetchPatients = useCallback(async () => {
+    const seq = ++requestSeq.current;
     try {
       setLoading(true);
       setError(null);
@@ -89,7 +93,7 @@ export default function PatientsPage() {
       const params = new URLSearchParams();
       params.append('page', page);
       params.append('limit', 10);
-      if (search.trim()) params.append('search', search.trim());
+      if (debouncedSearch.trim()) params.append('search', debouncedSearch.trim());
       if (conditionFilter !== 'all') params.append('condition', conditionFilter);
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (doctorFilter !== 'all') params.append('doctor', doctorFilter);
@@ -97,16 +101,18 @@ export default function PatientsPage() {
       if (endDate) params.append('endDate', endDate);
 
       const res = await api.get(`/patients?${params.toString()}`);
+      if (seq !== requestSeq.current) return;
       if (res.data.success) {
         setPatients(res.data.data);
         setPagination(res.data.pagination);
       }
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       setError(err.response?.data?.message || 'Failed to fetch patients list');
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
-  }, [page, search, conditionFilter, statusFilter, doctorFilter, startDate, endDate]);
+  }, [page, debouncedSearch, conditionFilter, statusFilter, doctorFilter, startDate, endDate]);
 
   useEffect(() => {
     fetchPatients();

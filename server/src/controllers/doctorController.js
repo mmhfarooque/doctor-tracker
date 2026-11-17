@@ -1,7 +1,7 @@
 import Doctor from '../models/Doctor.js';
 import Patient from '../models/Patient.js';
 import { escapeRegex, sanitizeString, isValidEmail } from '../utils/sanitize.js';
-import { isValidObjectId } from '../utils/validators.js';
+import { isValidObjectId, asString, parseBoundedInt, DOCTOR_STATUSES, PATIENT_STATUSES, GENDERS } from '../utils/validators.js';
 
 // @desc    Get all doctors with search, filters & pagination
 // @route   GET /api/doctors
@@ -39,8 +39,8 @@ export const getDoctors = async (req, res, next) => {
     }
 
     // Filter by Status
-    if (status && typeof status === 'string' && status !== 'all') {
-      query.status = sanitizeString(status);
+    if (typeof status === 'string' && DOCTOR_STATUSES.includes(status)) {
+      query.status = status;
     }
 
     // Date-wise filtering
@@ -148,9 +148,15 @@ export const getDoctorById = async (req, res, next) => {
 // @access  Private
 export const createDoctor = async (req, res, next) => {
   try {
-    const { name, specialization, hospital, phone, email, status, experienceYears, bio } = req.body;
+    const name = asString(req.body.name);
+    const specialization = asString(req.body.specialization);
+    const hospital = asString(req.body.hospital);
+    const phone = asString(req.body.phone);
+    const email = asString(req.body.email);
+    const bio = asString(req.body.bio);
+    const { status, experienceYears } = req.body;
 
-    if (!name || !specialization || !hospital || !phone || !email) {
+    if (!name.trim() || !specialization.trim() || !hospital.trim() || !phone.trim() || !email.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Name, specialization, hospital, phone, and email are required fields',
@@ -179,9 +185,9 @@ export const createDoctor = async (req, res, next) => {
       hospital: sanitizeString(hospital),
       phone: sanitizeString(phone),
       email: cleanEmail,
-      status: ['Active', 'On Leave', 'Inactive'].includes(status) ? status : 'Active',
-      experienceYears: Math.max(0, parseInt(experienceYears, 10) || 5),
-      bio: sanitizeString(bio || ''),
+      status: DOCTOR_STATUSES.includes(status) ? status : 'Active',
+      experienceYears: parseBoundedInt(experienceYears, 0, 70) ?? 5,
+      bio: sanitizeString(bio, 1000),
     });
 
     res.status(201).json({
@@ -203,7 +209,20 @@ export const updateDoctor = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
     }
 
-    const { name, specialization, hospital, phone, email, status, experienceYears, bio } = req.body;
+    const name = asString(req.body.name);
+    const specialization = asString(req.body.specialization);
+    const hospital = asString(req.body.hospital);
+    const phone = asString(req.body.phone);
+    const email = asString(req.body.email);
+    const { status, experienceYears, bio } = req.body;
+
+    let safeExperience;
+    if (experienceYears !== undefined && experienceYears !== '') {
+      safeExperience = parseBoundedInt(experienceYears, 0, 70);
+      if (safeExperience === null) {
+        return res.status(400).json({ success: false, message: 'Experience must be a number between 0 and 70' });
+      }
+    }
 
     let doctor = await Doctor.findById(req.params.id);
     if (!doctor) {
@@ -242,9 +261,9 @@ export const updateDoctor = async (req, res, next) => {
         hospital: hospital ? sanitizeString(hospital) : doctor.hospital,
         phone: phone ? sanitizeString(phone) : doctor.phone,
         email: cleanEmail,
-        status: status && ['Active', 'On Leave', 'Inactive'].includes(status) ? status : doctor.status,
-        experienceYears: experienceYears !== undefined ? Math.max(0, parseInt(experienceYears, 10)) : doctor.experienceYears,
-        bio: bio !== undefined ? sanitizeString(bio) : doctor.bio,
+        status: DOCTOR_STATUSES.includes(status) ? status : doctor.status,
+        experienceYears: safeExperience ?? doctor.experienceYears,
+        bio: typeof bio === 'string' ? sanitizeString(bio, 1000) : doctor.bio,
       },
       { new: true, runValidators: true }
     );
@@ -259,7 +278,7 @@ export const updateDoctor = async (req, res, next) => {
   }
 };
 
-// @desc    Delete doctor and cascade assigned patients
+// @desc    Delete doctor (refused while patients are still assigned, so clinical records are never lost silently)
 // @route   DELETE /api/doctors/:id
 // @access  Private
 export const deleteDoctor = async (req, res, next) => {
@@ -276,14 +295,19 @@ export const deleteDoctor = async (req, res, next) => {
       });
     }
 
-    await Promise.all([
-      Patient.deleteMany({ doctor: doctor._id }),
-      Doctor.findByIdAndDelete(req.params.id),
-    ]);
+    const assignedPatients = await Patient.countDocuments({ doctor: doctor._id });
+    if (assignedPatients > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `This doctor still has ${assignedPatients} assigned patient(s). Reassign or remove them before deleting the doctor.`,
+      });
+    }
+
+    await Doctor.findByIdAndDelete(doctor._id);
 
     res.json({
       success: true,
-      message: 'Doctor and assigned patients deleted successfully',
+      message: 'Doctor deleted successfully',
     });
   } catch (error) {
     next(error);
@@ -316,12 +340,12 @@ export const getDoctorPatients = async (req, res, next) => {
       query.$or = [{ name: regex }, { condition: regex }, { phone: regex }];
     }
 
-    if (condition && condition !== 'all') {
-      query.condition = sanitizeString(condition);
+    if (typeof condition === 'string' && condition && condition !== 'all') {
+      query.condition = new RegExp(escapeRegex(condition), 'i');
     }
 
-    if (status && status !== 'all') {
-      query.status = sanitizeString(status);
+    if (typeof status === 'string' && PATIENT_STATUSES.includes(status)) {
+      query.status = status;
     }
 
     const safePage = Math.max(1, parseInt(page, 10) || 1);
@@ -376,35 +400,45 @@ export const addPatientToDoctor = async (req, res, next) => {
       });
     }
 
-    const { name, age, gender, condition, status, phone, email, notes, admissionDate } = req.body;
+    const name = asString(req.body.name);
+    const condition = asString(req.body.condition);
+    const phone = asString(req.body.phone);
+    const email = asString(req.body.email).toLowerCase().trim();
+    const notes = asString(req.body.notes);
+    const { age, gender, status, admissionDate } = req.body;
 
-    if (!name || age === undefined || !gender || !condition) {
+    if (!name.trim() || age === undefined || age === '' || !gender || !condition.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Patient name, age, gender, and condition are required',
       });
     }
 
-    const safeAge = parseInt(age, 10);
-    if (isNaN(safeAge) || safeAge < 0 || safeAge > 130) {
+    const safeAge = parseBoundedInt(age, 0, 130);
+    if (safeAge === null) {
       return res.status(400).json({
         success: false,
         message: 'Please provide a valid age between 0 and 130',
       });
     }
 
+    if (email && !isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid patient email address',
+      });
+    }
+
     const patient = await Patient.create({
       name: sanitizeString(name),
       age: safeAge,
-      gender: ['Male', 'Female', 'Other'].includes(gender) ? gender : 'Male',
+      gender: GENDERS.includes(gender) ? gender : 'Other',
       condition: sanitizeString(condition),
-      status: ['Stable', 'Critical', 'Under Observation', 'Recovering', 'Discharged'].includes(status)
-        ? status
-        : 'Stable',
-      phone: sanitizeString(phone || ''),
-      email: email ? email.toLowerCase().trim() : '',
+      status: PATIENT_STATUSES.includes(status) ? status : 'Stable',
+      phone: sanitizeString(phone),
+      email,
       doctor: doctor._id,
-      notes: sanitizeString(notes || ''),
+      notes: sanitizeString(notes, 2000),
       admissionDate: admissionDate && !isNaN(new Date(admissionDate).getTime()) ? new Date(admissionDate) : new Date(),
     });
 

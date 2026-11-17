@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
@@ -20,6 +20,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import api from '../../../lib/api';
+import useDebounce from '../../../hooks/useDebounce';
 import Modal from '../../../components/common/Modal';
 import Pagination from '../../../components/common/Pagination';
 
@@ -34,6 +35,8 @@ export default function DoctorDetailPage() {
 
   // Filters for doctor's patient list
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
+  const requestSeq = useRef(0); // ignore responses from requests that a newer one has superseded
   const [conditionFilter, setConditionFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -66,12 +69,14 @@ export default function DoctorDetailPage() {
   // Fetch Doctor details & their patients
   const fetchDoctorData = useCallback(async () => {
     if (!id) return;
+    const seq = ++requestSeq.current;
     try {
       setLoading(true);
       setError(null);
 
       // Fetch doctor details
       const docRes = await api.get(`/doctors/${id}`);
+      if (seq !== requestSeq.current) return;
       if (docRes.data.success) {
         setDoctor(docRes.data.data);
         setEditDoctorData(docRes.data.data);
@@ -81,21 +86,23 @@ export default function DoctorDetailPage() {
       const params = new URLSearchParams();
       params.append('page', page);
       params.append('limit', 10);
-      if (search.trim()) params.append('search', search.trim());
+      if (debouncedSearch.trim()) params.append('search', debouncedSearch.trim());
       if (conditionFilter !== 'all') params.append('condition', conditionFilter);
       if (statusFilter !== 'all') params.append('status', statusFilter);
 
       const patRes = await api.get(`/doctors/${id}/patients?${params.toString()}`);
+      if (seq !== requestSeq.current) return;
       if (patRes.data.success) {
         setPatients(patRes.data.data);
         setPagination(patRes.data.pagination);
       }
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       setError(err.response?.data?.message || 'Failed to load doctor profile');
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
-  }, [id, page, search, conditionFilter, statusFilter]);
+  }, [id, page, debouncedSearch, conditionFilter, statusFilter]);
 
   useEffect(() => {
     fetchDoctorData();
