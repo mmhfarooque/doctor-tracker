@@ -70,7 +70,7 @@ Doctor Tracker/
 │   ├── .env.example                            # Public client env template
 │   ├── .env.local                              # Local client env (NEXT_PUBLIC_API_URL=http://localhost:5000/api)
 │   ├── next.config.mjs                         # Next.js config with Content Security Policy (CSP)
-│   ├── package.json                            # Next.js 14.2.35, React 18, Recharts, Lucide
+│   ├── package.json                            # Next.js 16, React 19, Recharts, Lucide
 │   ├── postcss.config.js                       # PostCSS config with Tailwind & Autoprefixer
 │   └── tailwind.config.js                      # Custom medical-themed color palette
 │
@@ -360,6 +360,39 @@ Owner asked for a complete, user-friendly admin UI (old one had the user badge t
 * Doctors / Patients / Doctor profile: table on desktop, cards on mobile; status tabs (patients); "More filters" row; filter chips; row menus; sorting.
 * API additions: `GET /api/doctors/filters` (distinct specialties + hospitals); dashboard `specialtyDistribution[].patients`. Tests 16/16.
 * Verified: `next build` OK, screenshots desktop + mobile in docs/screenshots, no horizontal scroll at 390 px on any page.
+
+---
+
+## 11. Security, Maintenance & Future-proofing Audit — 2026-11-17 (late)
+
+**Dependencies**
+* Client was on Next.js 14.2 (end of life; critical advisories incl. image-optimizer RCE, SSRF, cache poisoning, DoS). Upgraded to **Next 16.4.6 + React 19**, postcss 8.5.33. `npm audit`: 0 vulnerabilities in both server and client. Removed unused `clsx`, `tailwind-merge`.
+* Deliberately NOT upgraded (major versions, no advisories): Express 5, Mongoose 9, Tailwind 4, Recharts 3, lucide 1.x — Dependabot will raise them.
+
+**Code quality**
+* ESLint 9 flat config in both apps (`npm run lint`; client uses eslint-config-next 16 incl. React Compiler hook rules). Both clean.
+* New `client/src/hooks/useApi.js`: one data-fetching hook (AbortController cancels superseded requests, keeps previous data while loading, no setState-in-effect). Replaced 4 hand-rolled fetch/stale-guard blocks.
+* Forms and ⌘K palette mount fresh on open (state from props) instead of resetting in effects. Drawer uses `useEffectEvent`.
+* Auth: session read at startup, then verified with `/auth/me` (expired 12h tokens now log out cleanly). axios 401 → `SESSION_EXPIRED` event → router redirect (no full reload). Login 401 no longer triggers it.
+* Dead code removed (`sanitizeQuery`, `boundString`).
+
+**Security hardening**
+* Request logs record the path only — query strings (patient names, conditions) are never written to logs.
+* 404 no longer echoes the requested URL.
+* Phone numbers validated (doctor + patient create/update); page number capped at 10 000.
+* New admin passwords: 8–128 chars with a letter and a number (model minlength 8).
+* Client headers: COOP same-origin, HSTS in production (plus existing CSP, frame DENY, nosniff).
+* Tests 19/19 (added phone, strong password, 404 no-echo).
+
+**Future-proofing**
+* `.github/workflows/ci.yml`: server lint + tests against a MongoDB 8 service + audit; client lint + build + audit.
+* `.github/dependabot.yml` weekly npm (grouped minor/patch) + monthly actions. `.nvmrc` (22), `engines >=20.9`, `.editorconfig`.
+* Favicon (`app/icon.svg`); Next dev badge disabled.
+
+**Known, accepted trade-offs**
+* JWT kept in localStorage (separate API origin on Render vs Vercel makes httpOnly cookies cross-site); mitigated by strict CSP, 12h expiry, no HTML injection paths (React escaping, no dangerouslySetInnerHTML).
+* CSP keeps 'unsafe-inline' for scripts (Next.js bootstrap without nonces).
+* Stateless JWT: logout is client-side; a stolen token is valid until expiry.
 
 ---
 

@@ -40,27 +40,3 @@ export const isValidEmail = (email) => {
   const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
   return emailRegex.test(email.trim());
 };
-
-/**
- * Deep sanitizes object keys and values to prevent NoSQL operator injection
- * @param {any} obj
- * @returns {any}
- */
-export const sanitizeQuery = (obj) => {
-  if (obj === null || typeof obj !== 'object') {
-    return typeof obj === 'string' ? sanitizeString(obj) : obj;
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(sanitizeQuery);
-  }
-
-  const clean = {};
-  for (const key of Object.keys(obj)) {
-    if (key.startsWith('$')) {
-      continue;
-    }
-    clean[key] = sanitizeQuery(obj[key]);
-  }
-  return clean;
-};

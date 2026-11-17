@@ -1,10 +1,10 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, MoreHorizontal, UserPlus, Pencil, Eye, Stethoscope, SlidersHorizontal } from 'lucide-react';
-import api from '../../lib/api';
+import useApi from '../../hooks/useApi';
 import useDebounce from '../../hooks/useDebounce';
 import PageHeader from '../../components/ui/PageHeader';
 import SearchInput from '../../components/ui/SearchInput';
@@ -18,7 +18,7 @@ import { TableSkeleton } from '../../components/ui/Skeleton';
 import DoctorForm from '../../components/forms/DoctorForm';
 import PatientForm from '../../components/forms/PatientForm';
 import { DOCTOR_STATUSES, findStatus } from '../../lib/constants';
-import { apiError, formatDate } from '../../lib/format';
+import { formatDate } from '../../lib/format';
 
 const LIMIT = 10;
 const SORTS = [
@@ -42,29 +42,12 @@ function DoctorsView() {
   const [page, setPage] = useState(1);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
 
-  const [doctors, setDoctors] = useState([]);
-  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
-  const [options, setOptions] = useState({ specializations: [], hospitals: [] });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
   const [editing, setEditing] = useState(undefined); // undefined = closed, null = new, object = edit
   const [admitFor, setAdmitFor] = useState(null);
 
   const debouncedSearch = useDebounce(search, 300);
-  const requestSeq = useRef(0);
 
-  const loadOptions = useCallback(() => {
-    api
-      .get('/doctors/filters')
-      .then((res) => setOptions(res.data.data))
-      .catch(() => {});
-  }, []);
-
-  const fetchDoctors = useCallback(async () => {
-    const seq = ++requestSeq.current;
-    setLoading(true);
-    setError('');
+  const query = useMemo(() => {
     const [sortBy, order] = sort.split(':');
     const q = new URLSearchParams({ page, limit: LIMIT, sortBy, order });
     if (debouncedSearch.trim()) q.set('search', debouncedSearch.trim());
@@ -73,26 +56,17 @@ function DoctorsView() {
     if (status) q.set('status', status);
     if (startDate) q.set('startDate', startDate);
     if (endDate) q.set('endDate', endDate);
-    try {
-      const res = await api.get(`/doctors?${q}`);
-      if (seq !== requestSeq.current) return;
-      setDoctors(res.data.data);
-      setPagination(res.data.pagination);
-    } catch (err) {
-      if (seq !== requestSeq.current) return;
-      setError(apiError(err, 'Doctors could not be loaded.'));
-    } finally {
-      if (seq === requestSeq.current) setLoading(false);
-    }
+    return q.toString();
   }, [page, debouncedSearch, specialization, hospital, status, startDate, endDate, sort]);
 
-  useEffect(() => {
-    fetchDoctors();
-  }, [fetchDoctors]);
-
-  useEffect(() => {
-    loadOptions();
-  }, [loadOptions]);
+  const list = useApi(`/doctors?${query}`, 'Doctors could not be loaded.');
+  const filters = useApi('/doctors/filters');
+  const doctors = list.data?.data || [];
+  const pagination = list.data?.pagination || { total: 0, totalPages: 1 };
+  const options = filters.data?.data || { specializations: [], hospitals: [] };
+  const { loading, error } = list;
+  const fetchDoctors = list.reload;
+  const loadOptions = filters.reload;
 
   // Any filter change returns to the first page
   const withReset = (setter) => (value) => {

@@ -10,7 +10,7 @@ Doctor Tracker is a high-performance, full-stack healthcare administrative platf
 Follow these steps to run the application locally on your machine.
 
 ### Prerequisites
-* **Node.js**: v18.0.0 or higher (v20+ recommended)
+* **Node.js**: v20.9 or higher (v22 recommended, see `.nvmrc`)
 * **npm** or **pnpm**
 * **MongoDB**: A local instance or a free MongoDB Atlas URI
 

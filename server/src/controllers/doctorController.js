@@ -1,14 +1,14 @@
 import Doctor from '../models/Doctor.js';
 import Patient from '../models/Patient.js';
 import { escapeRegex, sanitizeString, isValidEmail } from '../utils/sanitize.js';
-import { isValidObjectId, asString, parseBoundedInt, DOCTOR_STATUSES, PATIENT_STATUSES, GENDERS } from '../utils/validators.js';
+import { isValidObjectId, isValidPhone, asString, parseBoundedInt, DOCTOR_STATUSES, PATIENT_STATUSES, GENDERS } from '../utils/validators.js';
 
 // @desc    Get all doctors with search, filters & pagination
 // @route   GET /api/doctors
 // @access  Private
 export const getDoctors = async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const page = Math.min(10000, Math.max(1, parseInt(req.query.page, 10) || 1));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const skip = (page - 1) * limit;
 
@@ -163,6 +163,10 @@ export const createDoctor = async (req, res, next) => {
       });
     }
 
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid phone number' });
+    }
+
     const cleanEmail = email.toLowerCase().trim();
     if (!isValidEmail(cleanEmail)) {
       return res.status(400).json({
@@ -222,6 +226,10 @@ export const updateDoctor = async (req, res, next) => {
       if (safeExperience === null) {
         return res.status(400).json({ success: false, message: 'Experience must be a number between 0 and 70' });
       }
+    }
+
+    if (phone && !isValidPhone(phone)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid phone number' });
     }
 
     let doctor = await Doctor.findById(req.params.id);
@@ -348,7 +356,7 @@ export const getDoctorPatients = async (req, res, next) => {
       query.status = status;
     }
 
-    const safePage = Math.max(1, parseInt(page, 10) || 1);
+    const safePage = Math.min(10000, Math.max(1, parseInt(page, 10) || 1));
     const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (safePage - 1) * safeLimit;
 
@@ -420,6 +428,10 @@ export const addPatientToDoctor = async (req, res, next) => {
         success: false,
         message: 'Please provide a valid age between 0 and 130',
       });
+    }
+
+    if (phone && !isValidPhone(phone)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid phone number' });
     }
 
     if (email && !isValidEmail(email)) {

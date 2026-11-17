@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import { X } from 'lucide-react';
 
 /**
@@ -9,19 +9,17 @@ import { X } from 'lucide-react';
  */
 export default function Drawer({ open, onClose, title, description, children, footer }) {
   const panelRef = useRef(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  const handleEscape = useEffectEvent((e) => e.key === 'Escape' && onClose());
 
   // Runs only when the drawer opens/closes, so parent re-renders never move focus while typing
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => e.key === 'Escape' && closeRef.current();
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', handleEscape);
     document.body.style.overflow = 'hidden';
     const first = panelRef.current?.querySelector('input, select, textarea');
     first?.focus();
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
     };
   }, [open]);

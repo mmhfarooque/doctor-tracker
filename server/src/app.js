@@ -95,7 +95,9 @@ app.use('/api', (req, res, next) => {
 
 // Logging
 if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('dev'));
+  // Log the path only: query strings carry search terms such as patient names (protected health information)
+  morgan.token('path', (req) => req.originalUrl.split('?')[0]);
+  app.use(morgan(':method :path :status :res[content-length] - :response-time ms'));
 }
 
 // Health check endpoint
@@ -117,7 +119,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use((req, res, next) => {
   res.status(404).json({
     success: false,
-    message: `API route not found: ${req.originalUrl}`,
+    message: 'API route not found',
   });
 });
 

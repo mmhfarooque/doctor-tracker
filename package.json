@@ -10,6 +10,10 @@
     "build:client": "cd client && npm run build",
     "install:all": "cd server && npm install && cd ../client && npm install",
     "test": "cd server && npm test",
-    "sync-indexes": "cd server && npm run sync-indexes"
+    "sync-indexes": "cd server && npm run sync-indexes",
+    "lint": "cd server && npm run lint && cd ../client && npm run lint"
+  },
+  "engines": {
+    "node": ">=20.9"
   }
 }

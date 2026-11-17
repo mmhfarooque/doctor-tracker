@@ -1,38 +1,35 @@
 import axios from 'axios';
+import { SESSION_EXPIRED, clearStoredSession } from './session';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 20000,
 });
 
-// Request interceptor to attach JWT token
-api.interceptors.request.use(
-  (config) => {
-    if (typeof window !== 'undefined') {
+// Attach the JWT to every request
+api.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    try {
       const token = localStorage.getItem('token');
-      // Validate token structure before attaching (header.payload.signature)
-      if (token && typeof token === 'string' && token.split('.').length === 3) {
+      if (token && token.split('.').length === 3) {
         config.headers.Authorization = `Bearer ${token}`;
       }
+    } catch {
+      // storage unavailable — request goes out unauthenticated and the API answers 401
     }
-    return config;
-  },
-  (error) => Promise.reject(error),
-);
+  }
+  return config;
+});
 
-// Response interceptor to handle expired tokens
+// An expired or revoked token ends the session; AuthContext listens and routes to /login
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (typeof window !== 'undefined' && error.response && error.response.status === 401) {
-      // Clear token if unauthorized
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login';
-      }
+    const isLoginCall = error.config?.url?.includes('/auth/login');
+    if (typeof window !== 'undefined' && error.response?.status === 401 && !isLoginCall) {
+      clearStoredSession();
+      window.dispatchEvent(new Event(SESSION_EXPIRED));
     }
     return Promise.reject(error);
   },

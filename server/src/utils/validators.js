@@ -9,16 +9,8 @@ export const isValidObjectId = (...ids) => {
   return ids.every((id) => id && typeof id === 'string' && mongoose.Types.ObjectId.isValid(id) && /^[0-9a-fA-F]{24}$/.test(id));
 };
 
-/**
- * Bounds a string to a safe maximum length
- * @param {string} str
- * @param {number} maxLength
- * @returns {string}
- */
-export const boundString = (str, maxLength = 200) => {
-  if (typeof str !== 'string') return '';
-  return str.trim().slice(0, maxLength);
-};
+/** Phone numbers: digits with optional +, spaces, dashes, dots and brackets (7–30 chars). */
+export const isValidPhone = (value) => typeof value === 'string' && /^\+?[0-9 ().-]{7,30}$/.test(value.trim());
 
 /**
  * Returns the value if it is a string, otherwise an empty string.
