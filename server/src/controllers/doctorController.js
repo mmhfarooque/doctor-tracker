@@ -1,6 +1,7 @@
 import Doctor from '../models/Doctor.js';
 import Patient from '../models/Patient.js';
 import { escapeRegex, sanitizeString, isValidEmail } from '../utils/sanitize.js';
+import { isValidObjectId } from '../utils/validators.js';
 
 // @desc    Get all doctors with search, filters & pagination
 // @route   GET /api/doctors
@@ -115,6 +116,10 @@ export const getDoctors = async (req, res, next) => {
 // @access  Private
 export const getDoctorById = async (req, res, next) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+    }
+
     const doctor = await Doctor.findById(req.params.id);
     if (!doctor) {
       return res.status(404).json({
@@ -193,6 +198,10 @@ export const createDoctor = async (req, res, next) => {
 // @access  Private
 export const updateDoctor = async (req, res, next) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+    }
+
     const { name, specialization, hospital, phone, email, status, experienceYears, bio } = req.body;
 
     let doctor = await Doctor.findById(req.params.id);
@@ -254,6 +263,10 @@ export const updateDoctor = async (req, res, next) => {
 // @access  Private
 export const deleteDoctor = async (req, res, next) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+    }
+
     const doctor = await Doctor.findById(req.params.id);
     if (!doctor) {
       return res.status(404).json({
@@ -281,6 +294,10 @@ export const deleteDoctor = async (req, res, next) => {
 // @access  Private
 export const getDoctorPatients = async (req, res, next) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+    }
+
     const doctor = await Doctor.findById(req.params.id);
     if (!doctor) {
       return res.status(404).json({
@@ -345,6 +362,10 @@ export const getDoctorPatients = async (req, res, next) => {
 // @access  Private
 export const addPatientToDoctor = async (req, res, next) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
+    }
+
     const doctor = await Doctor.findById(req.params.id);
     if (!doctor) {
       return res.status(404).json({
@@ -401,6 +422,10 @@ export const addPatientToDoctor = async (req, res, next) => {
 export const deletePatientFromDoctor = async (req, res, next) => {
   try {
     const { id: doctorId, patientId } = req.params;
+
+    if (!isValidObjectId(doctorId, patientId)) {
+      return res.status(400).json({ success: false, message: 'Invalid doctor or patient ID format' });
+    }
 
     const patient = await Patient.findOne({ _id: patientId, doctor: doctorId });
     if (!patient) {

@@ -1,6 +1,7 @@
 import Patient from '../models/Patient.js';
 import Doctor from '../models/Doctor.js';
 import { escapeRegex, sanitizeString, isValidEmail } from '../utils/sanitize.js';
+import { isValidObjectId } from '../utils/validators.js';
 
 // @desc    Get all patients with search, filters & pagination
 // @route   GET /api/patients
@@ -102,6 +103,10 @@ export const getPatients = async (req, res, next) => {
 // @access  Private
 export const getPatientById = async (req, res, next) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid patient ID format' });
+    }
+
     const patient = await Patient.findById(req.params.id).populate(
       'doctor',
       'name specialization hospital email phone'
@@ -134,6 +139,13 @@ export const createPatient = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: 'Name, age, gender, condition, and doctor are required fields',
+      });
+    }
+
+    if (!isValidObjectId(doctor)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid assigned doctor ID format',
       });
     }
 
@@ -197,7 +209,15 @@ export const createPatient = async (req, res, next) => {
 // @access  Private
 export const updatePatient = async (req, res, next) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid patient ID format' });
+    }
+
     const { name, age, gender, condition, status, phone, email, doctor, notes, admissionDate } = req.body;
+
+    if (doctor && !isValidObjectId(doctor)) {
+      return res.status(400).json({ success: false, message: 'Invalid assigned doctor ID format' });
+    }
 
     let patient = await Patient.findById(req.params.id);
     if (!patient) {
@@ -274,6 +294,10 @@ export const updatePatient = async (req, res, next) => {
 // @access  Private
 export const deletePatient = async (req, res, next) => {
   try {
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: 'Invalid patient ID format' });
+    }
+
     const patient = await Patient.findById(req.params.id);
     if (!patient) {
       return res.status(404).json({

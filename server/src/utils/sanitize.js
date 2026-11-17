@@ -3,24 +3,29 @@
  */
 
 /**
- * Escapes regex special characters to prevent ReDoS and Regex Injection
+ * Escapes regex special characters to prevent ReDoS and Regex Injection.
+ * Automatically bounds the string to 100 characters to prevent query CPU exhaustion.
  * @param {string} str
  * @returns {string}
  */
 export const escapeRegex = (str) => {
   if (typeof str !== 'string') return '';
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const bounded = str.trim().slice(0, 100);
+  return bounded.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
 /**
- * Strips HTML tags and script elements to prevent XSS attacks
+ * Strips HTML tags and script elements to prevent XSS attacks.
+ * Bounds the string length to safe limits.
  * @param {string} str
+ * @param {number} maxLength
  * @returns {string}
  */
-export const sanitizeString = (str) => {
+export const sanitizeString = (str, maxLength = 300) => {
   if (typeof str !== 'string') return '';
   return str
     .trim()
+    .slice(0, maxLength)
     .replace(/<[^>]*>?/gm, '') // Strip HTML tags
     .replace(/[<>]/g, ''); // Strip remaining angle brackets
 };
@@ -37,7 +42,7 @@ export const isValidEmail = (email) => {
 };
 
 /**
- * Deep sanitizes object keys and values to prevent NoSQL operator injection (e.g. $where, $gt)
+ * Deep sanitizes object keys and values to prevent NoSQL operator injection
  * @param {any} obj
  * @returns {any}
  */
@@ -52,7 +57,6 @@ export const sanitizeQuery = (obj) => {
 
   const clean = {};
   for (const key of Object.keys(obj)) {
-    // Strip keys starting with '$' to prevent MongoDB operator injection from query strings
     if (key.startsWith('$')) {
       continue;
     }
