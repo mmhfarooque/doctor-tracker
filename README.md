@@ -1,7 +1,11 @@
 # Doctor Tracker — Healthcare Administrative Web Portal
 
 **Live demo:** https://doctor-tracker-three-gamma.vercel.app  ·  **API:** https://doctor-tracker-api-tawny.vercel.app/health
-**Demo login:** `admin@doctortracker.com` / `Password123!`
+
+### Demo Logins (Password for all: `Password123!`):
+* **Administrator:** `admin@doctortracker.com` — Full system access, team management, caseload transfers, shifts & scheduling.
+* **Doctor:** `doctor@doctortracker.com` — Scoped to Dr. Sarah Jenkins; views and admits only her assigned patients.
+* **Nurse:** `nurse@doctortracker.com` — Clinical updates: updates status, notes, and follow-up schedules.
 
 ## 1. Description
 Doctor Tracker is a secure admin portal for hospital administrators to manage doctors and the patients under their care: which doctor is treating whom, how many patients each doctor carries, and every patient's condition and clinical status. It pairs a Next.js frontend with a standalone Node.js/Express REST API on an indexed MongoDB database, and turns the data into a dashboard of caseloads, specialties, clinical status and admissions over time, with fast search, filtering and pagination throughout.
@@ -233,15 +237,20 @@ Doctor Tracker/
 │   │   │   ├── doctors/
 │   │   │   │   ├── page.jsx             # Doctors Roster with Filters & Search
 │   │   │   │   └── [id]/page.jsx        # Doctor Detail & Patient Roster
-│   │   │   └── patients/page.jsx        # Dedicated Patients View (Edit/Delete/Filter)
+│   │   │   ├── patients/
+│   │   │   │   ├── page.jsx             # Patients View (Filters, Bulk Actions, Archive)
+│   │   │   │   └── [id]/page.jsx        # Full Patient Record, History Timeline & Transfer
+│   │   │   ├── schedule/page.jsx        # Duty Roster & Shifts (Day / Night / On-call)
+│   │   │   └── team/page.jsx            # Team Accounts & Access Control (Admin)
 │   │   ├── components/
 │   │   │   ├── ui/                      # Drawer, ConfirmDialog, Menu, Toast, Pagination, StatusBadge, Avatar, …
-│   │   │   ├── forms/                   # DoctorForm, PatientForm (side-panel forms)
+│   │   │   ├── forms/                   # DoctorForm, PatientForm, TransferDialog (side panels)
 │   │   │   ├── dashboard/               # WardStatus, AdmissionsChart (Recharts), BarList
+│   │   │   ├── activity/                # ActivityList (timeline/feed), AlertsBell (critical alerts), describe
 │   │   │   └── layout/                  # AppShell, Sidebar + account menu, CommandPalette, Logo
 │   │   ├── context/                     # AuthContext with Route Guards
 │   │   ├── hooks/                       # useApi (data fetching), useDebounce, useHydrated
-│   │   └── lib/                         # Axios client instance & interceptors
+│   │   └── lib/                         # Axios client instance, permissions, format, session
 │   ├── .env.example
 │   ├── package.json
 │   └── tailwind.config.js
@@ -249,18 +258,21 @@ Doctor Tracker/
 ├── server/                              # Standalone Node.js Express REST API
 │   ├── src/
 │   │   ├── config/                      # MongoDB Connection logic
-│   │   ├── controllers/                 # Auth, Doctor, Patient, Dashboard Controllers
-│   │   ├── middleware/                  # JWT auth guard, Central error handler
-│   │   ├── models/                      # User, Doctor, Patient Mongoose Schemas (Indexed)
-│   │   ├── routes/                      # REST endpoints (/api/auth, /api/doctors, /api/patients, /api/dashboard)
+│   │   ├── controllers/                 # Auth, Doctor, Patient, Dashboard, Shift, Activity, Account Controllers
+│   │   ├── middleware/                  # JWT auth guard, Role authorizer, Central error handler
+│   │   ├── models/                      # User, Doctor, Patient, Activity, Shift Mongoose Schemas (Indexed)
+│   │   ├── routes/                      # REST endpoints (/api/auth, /api/doctors, /api/patients, /api/dashboard, /api/shifts, /api/activity, /api/accounts)
 │   │   ├── scripts/                     # seed.js (demo data), syncIndexes.js (align DB indexes)
 │   │   ├── utils/                       # sanitize + validation helpers
 │   │   ├── app.js                       # Express app (middleware + routes), importable by tests
 │   │   └── server.js                    # Entry: env check, DB connect, listen
-│   ├── tests/                           # API integration tests (node:test)
+│   ├── tests/                           # API integration & feature tests (node:test)
 │   ├── .env.example
 │   └── package.json
 │
+├── qa/                                  # End-to-end automated browser QA
+│   ├── browser-qa.mjs                   # 85-check Puppeteer headless suite
+│   └── README.md                        # QA instructions & coverage guide
 ├── docs/screenshots/                    # README visual evidence
 ├── render.yaml                          # Render blueprint for the API
 ├── package.json                         # Root helper scripts
@@ -271,10 +283,31 @@ Doctor Tracker/
 
 ## 7. Testing
 
+### Backend Integration Tests (40 / 40 Passing)
 ```bash
 cd server && npm test
 ```
-15 integration tests (built-in `node:test`, no extra dependencies) cover login, closed public sign-up, NoSQL-injection rejection, doctor create / duplicate email / search / pagination, adding patients under a doctor, editing and filtering patients, delete rules, dashboard aggregation and ID validation. They run against an isolated `doctor_tracker_test` database on the same cluster, which is dropped afterwards.
+40 integration tests (built-in `node:test`, no external test runner required) cover:
+- Authentication & JWT issuance, password security, NoSQL-injection defense, route protection
+- Roles & scoping: Administrator, Doctor (scoped to assigned patients), Nurse (status/notes/follow-up only)
+- Patient transfer between doctors with reason logging; doctor deletion safeguards
+- Follow-ups (overdue, today, upcoming) and length of stay calculations
+- Shift management, overlap prevention, on-call queries
+- Bulk actions, CSV export with formula injection sanitization, soft-archive and restore
+- Doctor capacity meters and critical alerts tracking
+Tests execute against an isolated `doctor_tracker_test` database dropped immediately after completion.
+
+### Browser QA Automation (85 / 85 Passing)
+```bash
+# In an external test runner directory:
+node qa/browser-qa.mjs ./out
+```
+An automated Puppeteer suite verifies 85 real user flows in headless Chrome:
+- Responsive layouts at 320px, 375px, 414px, 768px, 1024px, 1280px, 1920px (zero horizontal scroll)
+- Form validation: client HTML5 checks + server error messaging for invalid emails, phones, and out-of-range values
+- Security: Stored-XSS injection neutralization, NoSQL search tampering, URL manipulation
+- Interactive UI: Quick search (`Ctrl/Cmd+K`), drawer panels, patient timeline events, live status badges, alert bells
+- Network resiliency: API outage simulation with graceful error states and "Try again" recovery
 
 ---
 

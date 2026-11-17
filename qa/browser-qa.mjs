@@ -130,6 +130,11 @@ const submit = async (formId) => {
 };
 let qaDoc;
 await safe('Doctor form', 'flow', async () => {
+  // Clean up any leftover QA doctor from earlier runs
+  const leftovers = await (await fetch(API + '/doctors?search=qa-xss', { headers: H })).json().catch(() => ({ data: [] }));
+  for (const d of leftovers.data || []) {
+    await fetch(API + '/doctors/' + d._id, { method: 'DELETE', headers: H }).catch(() => {});
+  }
   await page.setViewport({ width: 1440, height: 900 });
   await page.goto(APP + '/doctors', { waitUntil: 'networkidle0' });
   await page.click('main header button.btn-primary');
@@ -365,8 +370,11 @@ await safe('Features', 'patient record', async () => {
   const opts = await page.$$eval('#t-doc option:not([disabled])', (o) => o.map((x) => x.value));
   await page.select('#t-doc', opts[0]);
   await page.type('#t-reason', 'QA transfer test');
-  await page.click('button[form="transfer-form"]');
-  await wait(1500);
+  await page.$eval('button[form="transfer-form"]', (btn) => btn.click());
+  await page.waitForFunction(
+    () => /transferred/.test(document.querySelector('main ol li')?.textContent || '') && /QA transfer test/.test(document.querySelector('main ol li')?.textContent || ''),
+    { timeout: 10000 }
+  );
   const latest = await page.$eval('main ol li', (li) => li.textContent);
   check('Features', 'Transfer with reason is applied and logged', /transferred/.test(latest) && /QA transfer test/.test(latest), latest.slice(0, 100));
 });
@@ -392,7 +400,7 @@ await safe('Features', 'schedule', async () => {
   await page.waitForSelector('#s-doc');
   const doc = await page.$$eval('#s-doc option:not([disabled])', (o) => o[0].value);
   await page.select('#s-doc', doc);
-  await page.click('button[form="shift-form"]');
+  await page.$eval('button[form="shift-form"]', (btn) => btn.click());
   await wait(1500);
   const drawerText = await page.$eval('[role=dialog]', (d) => d.textContent).catch(() => '');
   const toast = await page.$eval('[aria-live]', (e) => e.textContent).catch(() => '');
@@ -413,7 +421,7 @@ await safe('Features', 'team accounts', async () => {
   await page.$eval('#a-pass', (e) => (e.value = ''));
   await clear('#a-pass');
   await page.type('#a-pass', 'QaNurse2026');
-  await page.click('button[form="account-form"]');
+  await page.$eval('button[form="account-form"]', (btn) => btn.click());
   await wait(1500);
   check('Features', 'Admin creates a staff account', await page.$eval('main', (m) => /qa-nurse@example\.com/.test(m.textContent)));
   await page.click('button[aria-label="Remove QA Nurse"]');

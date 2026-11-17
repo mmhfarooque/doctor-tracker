@@ -442,4 +442,52 @@ Bugs it found and that were fixed:
 
 ---
 
+## 15. Extended Features, QA Hardening & Test Verification — 2026-11-17 (night handover)
+
+Full completion of all 12 extension features and end-to-end verification across the stack.
+
+### 12 Extended Features Delivered:
+1. **Roles & Scoping (`admin`, `doctor`, `nurse`):**
+   - Granular authorization middleware (`authorize(...)`) on all API routes.
+   - Doctor accounts are strictly scoped to their assigned caseload on both client and API.
+   - Nurse role enables clinical status updates, notes, and follow-up adjustments while restricting admissions, transfers, and staff management.
+2. **Patient Record Page (`/patients/[id]`):**
+   - Full clinical profile with stay duration, attending physician link, clinical notes, and quick status action bar.
+   - Built-in browser print styling for physical charting.
+3. **Activity Audit Trail & Patient Timeline:**
+   - Unified `Activity` schema logging admissions, status transitions, transfers, and follow-ups.
+   - Real-time activity feeds and visual timeline with connecting rails on patient records.
+4. **Caseload Transfers:**
+   - Single-patient transfer with mandatory reason logged in patient history.
+   - Caseload reassignment workflow for offboarding doctors.
+5. **Follow-Up Management:**
+   - Follow-up dates with overdue, today, and upcoming filters on both dashboard and patients table.
+6. **Discharge & Length of Stay Tracking:**
+   - Automatic discharge date logging; calculation of patient stay lengths and hospital-wide average length of stay.
+7. **Doctor Capacity & Workload Indicators:**
+   - Real-time patient capacity meters with over-capacity warnings.
+8. **Duty Schedule & Shift Management (`/schedule`):**
+   - Weekly shift grid, real-time "On duty now" indicators, shift assignment with clash/overlap prevention.
+9. **Team & Staff Access Management (`/team`):**
+   - Administrator management of staff user accounts with role selection and password strength enforcement.
+10. **Critical Patient Alerts:**
+    - Live alert bell with unread counter for patients transitioned to critical status; quick dismiss and direct navigation.
+11. **Soft-Archive & Restore:**
+    - Non-destructive archiving with undo toast notification; archive tab with permanent deletion confirmation modals.
+12. **Safe Bulk Actions & CSV Export:**
+    - Multi-select bulk status updates and bulk archiving.
+    - Sanitized CSV export defending against spreadsheet formula injection attacks (`=`, `+`, `-`, `@`).
+
+### QA Resolutions & Test Results:
+* **Puppeteer Drawer Click Resolution:** Puppeteer's native `page.click()` threw `Node is either not clickable or not an Element` when targeting buttons located inside sliding drawer footers (`<Drawer>`). Resolved by dispatching direct element click evaluations (`page.$eval(selector, el => el.click())`), which bypasses layout-animation coordinates.
+* **Patient Transfer Race Condition Fixed:** `qa/browser-qa.mjs` was relying on an arbitrary 1500ms timeout that raced against concurrent asynchronous `/transfer` POST and `/history` GET requests. Switched to `page.waitForFunction()` targeting the rendered timeline DOM, ensuring test reliability regardless of network latency.
+* **Test Isolation & Cleanup:** Added pre-test database cleanup for QA-generated entities, avoiding duplicate email errors during repeated test runs.
+* **Test Verification:**
+  - **40 / 40** Backend integration tests passing (`server/npm test`).
+  - **85 / 85** Browser QA suite checks passing (`qa/browser-qa.mjs`).
+  - Next.js 16 (Turbopack) production build clean (`client/npm run build`).
+  - ESLint 9 clean on both client and server (`npm run lint`).
+
+---
+
 *This document serves as the single source of truth for the Doctor Tracker full-stack codebase. Any subsequent AI assistant or software engineer can read this file and have complete technical context.*
