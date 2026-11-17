@@ -349,8 +349,10 @@ Both apps run on **Vercel** as two projects from this repository.
 
 ## 10. Author & Credits
 
-Designed, architected, and engineered by **Mfaruk** ([@mmhfarooque](https://github.com/mmhfarooque)).  
-* **Personal Blog & Technical Case Studies:** [https://mfaruk.com/blog](https://mfaruk.com/blog)  
+Designed, architected, and engineered by **Mahmud Farooque**.  
+* **Website & Blog:** [https://mfaruk.com](https://mfaruk.com)  
+* **Email:** [me@mfaruk.com](mailto:me@mfaruk.com)  
+* **LinkedIn:** [https://www.linkedin.com/in/mmhfarooque/](https://www.linkedin.com/in/mmhfarooque/)  
 * **GitHub:** [https://github.com/mmhfarooque](https://github.com/mmhfarooque)  
 * **Live Application:** [https://doctor-tracker-three-gamma.vercel.app](https://doctor-tracker-three-gamma.vercel.app)
 

@@ -1,7 +1,7 @@
 {
   "name": "doctor-tracker-client",
   "version": "0.1.0",
-  "author": "Mfaruk (https://github.com/mmhfarooque)",
+  "author": "Mahmud Farooque <me@mfaruk.com> (https://mfaruk.com)",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",

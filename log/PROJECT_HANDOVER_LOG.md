@@ -1,5 +1,5 @@
 # DOCTOR TRACKER — COMPLETE PROJECT HANDOVER & ARCHITECTURE LOG
-> **Creator & Lead Architect:** Mfaruk ([@mmhfarooque](https://github.com/mmhfarooque)) | [mfaruk.com/blog](https://mfaruk.com/blog)  
+> **Creator & Lead Architect:** Mahmud Farooque ([@mmhfarooque](https://github.com/mmhfarooque)) | [mfaruk.com](https://mfaruk.com) | [me@mfaruk.com](mailto:me@mfaruk.com) | [LinkedIn](https://www.linkedin.com/in/mmhfarooque/)  
 > **Repository:** https://github.com/mmhfarooque/doctor-tracker  
 > **Current Status:** Feature-complete, 10 security audit fixes applied, 49 backend tests + 85 browser QA tests passing. Deployed live on Vercel.  
 > **Last Updated:** 2026-11-17 (Audit & Deployment, see §15 & §16)
