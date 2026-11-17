@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import connectDB from './config/db.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { mongoSanitizeMiddleware } from './middleware/sanitizeMiddleware.js';
 
 import authRoutes from './routes/authRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
@@ -66,9 +67,10 @@ app.use('/api', apiLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
-// 4. Body Parsers with payload limits
+// 4. Body Parsers with payload limits & NoSQL Injection Sanitization
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(mongoSanitizeMiddleware);
 
 // Logging
 if (process.env.NODE_ENV !== 'test') {
