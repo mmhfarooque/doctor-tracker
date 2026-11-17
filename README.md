@@ -344,3 +344,13 @@ Both apps run on **Vercel** as two projects from this repository.
 * The demo seeder refuses to run against a production environment unless forced.
 * CI runs lint, tests against MongoDB, the production build and `npm audit` on every push; Dependabot proposes updates weekly.
 * Secrets live only in git-ignored `.env` files.
+
+---
+
+## 10. Author & Credits
+
+Designed, architected, and engineered by **Mfaruk** ([@mmhfarooque](https://github.com/mmhfarooque)).  
+* **Personal Blog & Technical Case Studies:** [https://mfaruk.com/blog](https://mfaruk.com/blog)  
+* **GitHub:** [https://github.com/mmhfarooque](https://github.com/mmhfarooque)  
+* **Live Application:** [https://doctor-tracker-three-gamma.vercel.app](https://doctor-tracker-three-gamma.vercel.app)
+

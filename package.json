@@ -2,6 +2,11 @@
   "name": "doctor-tracker",
   "version": "1.0.0",
   "description": "Doctor Tracker - Healthcare Administrative Portal",
+  "author": "Mfaruk (https://github.com/mmhfarooque)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mmhfarooque/doctor-tracker.git"
+  },
   "private": true,
   "scripts": {
     "dev:server": "cd server && npm run dev",

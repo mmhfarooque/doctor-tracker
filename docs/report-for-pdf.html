@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Engineering Doctor Tracker: How I Built a High-Trust, Role-Scoped Clinical Administration SaaS</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      line-height: 1.6;
+      font-size: 10.5pt;
+      margin: 0;
+      padding: 0;
+    }
+    h1 {
+      font-size: 22pt;
+      color: #112620;
+      margin-top: 0;
+      margin-bottom: 8px;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+    .subtitle {
+      font-size: 12pt;
+      color: #059669;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .meta {
+      font-size: 9pt;
+      color: #64748b;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .banner {
+      width: 100%;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .infographic {
+      width: 100%;
+      border-radius: 8px;
+      margin: 16px 0;
+      border: 1px solid #e2e8f0;
+    }
+    h2 {
+      font-size: 14pt;
+      color: #0d281e;
+      border-bottom: 1.5px solid #10b981;
+      padding-bottom: 4px;
+      margin-top: 24px;
+      margin-bottom: 10px;
+      page-break-after: avoid;
+    }
+    h3 {
+      font-size: 11.5pt;
+      color: #1e293b;
+      margin-top: 16px;
+      margin-bottom: 6px;
+      page-break-after: avoid;
+    }
+    p, ul, ol {
+      margin-bottom: 10px;
+    }
+    li {
+      margin-bottom: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 9.5pt;
+      page-break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 7px 9px;
+      text-align: left;
+    }
+    th {
+      background-color: #f1f5f9;
+      color: #0f172a;
+      font-weight: 600;
+    }
+    tr:nth-child(even) td {
+      background-color: #f8fafc;
+    }
+    code {
+      background: #f1f5f9;
+      color: #0f766e;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 9pt;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    pre {
+      background: #0b1915;
+      color: #e2e8f0;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 8.5pt;
+      overflow-x: auto;
+      margin: 12px 0;
+      page-break-inside: avoid;
+    }
+    .callout {
+      background: #f0fdf4;
+      border-left: 4px solid #10b981;
+      padding: 10px 14px;
+      margin: 14px 0;
+      border-radius: 0 6px 6px 0;
+      font-size: 10pt;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Engineering Doctor Tracker: How I Built a High-Trust, Role-Scoped Clinical Administration SaaS</h1>
+  <div class="subtitle">An architectural deep dive into healthcare workforce intelligence, zero-PHI security, and automated QA.</div>
+  <div class="meta">
+    Author: <strong>Mfaruk</strong> (mfaruk.com/blog) &nbsp;|&nbsp; 12 min read &nbsp;|&nbsp; Published: November 2026 &nbsp;|&nbsp; Live: <a href="https://doctor-tracker-three-gamma.vercel.app">doctor-tracker-three-gamma.vercel.app</a>
+  </div>
+
+  <img src="featured-banner.jpg" class="banner" alt="Doctor Tracker Featured Banner">
+
+  <h2>1. The Problem: Hospital Administration in Chaos</h2>
+  <p>
+    In a fast-paced inpatient hospital ward, information latency is a patient safety issue. When a patient’s vitals suddenly drop from stable to critical at 2:00 AM, the care team cannot afford to spend minutes cross-referencing outdated spreadsheets, calling around to see which attending physician owns the caseload, or guessing whether the on-duty cardiologist is already operating at maximum capacity.
+  </p>
+  <p>
+    Despite billions invested in enterprise EHR software, everyday ward management often degenerates into informal spreadsheets and whiteboards. These solutions suffer from three fatal flaws:
+  </p>
+  <ul>
+    <li><strong>Zero Caseload Guardrails:</strong> Physicians are assigned patients past safe capacity without warning, triggering clinician burnout and clinical risk.</li>
+    <li><strong>Untracked Handoffs:</strong> Patients transferred between specialists lose their history, with no audit log of why the transfer occurred or who authorized it.</li>
+    <li><strong>Privacy & Compliance Hazards:</strong> Spreading Protected Health Information (PHI) across informal tools invites serious HIPAA violations.</li>
+  </ul>
+  <p>
+    To solve this, I designed and built <strong>Doctor Tracker</strong> — an administrative SaaS platform pairing a <strong>Next.js 16</strong> client with a standalone <strong>Node.js 22 / Express REST API</strong> on <strong>MongoDB Atlas</strong>.
+  </p>
+
+  <div class="callout">
+    <strong>Verification Metrics:</strong> 49/49 Backend Integration Tests Passing &bull; 85/85 Headless Puppeteer Browser QA Checks Passing &bull; Next.js 16 Turbopack Production Build Clean &bull; 10 Enterprise Security Audit Remediations Applied.
+  </div>
+
+  <h2>2. System Architecture & Platform Overview</h2>
+  <img src="saas-overview-diagram.svg" class="infographic" alt="Platform Overview Infographic">
+
+  <p>
+    Doctor Tracker is organized around a strict separation of concerns, decoupling the presentation tier from the business and data storage tier:
+  </p>
+  <ul>
+    <li><strong>Frontend Tier:</strong> Next.js 16 (App Router, React 19, Turbopack, Tailwind CSS). Data fetching is unified under an optimized <code>useApi</code> hook with <code>AbortController</code>, race-condition cancellation, and URL-as-single-source-of-truth.</li>
+    <li><strong>Backend REST API:</strong> Standalone Node.js 22 + Express 4. Maintains persistent Mongoose database connection pools and executes intensive aggregation pipelines without competing with SSR page rendering threads.</li>
+    <li><strong>Database:</strong> MongoDB Atlas replica set with compound indexes matching exact query patterns (e.g. <code>{ doctor: 1, status: 1 }</code>, <code>{ specialization: 1 }</code>).</li>
+  </ul>
+
+  <div class="page-break"></div>
+
+  <h2>3. Role-Based Access Control (RBAC) & Physician Sandboxing</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Role</th>
+        <th>Target Persona</th>
+        <th>Permissions & Scope</th>
+        <th>Privacy & Security Boundary</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Administrator</strong></td>
+        <td>Medical Director / Ward Manager</td>
+        <td>Global ward visibility, duty shifts, staff user provisioning, caseload transfers, and permanent record archiving.</td>
+        <td>Protected administrative endpoints; enforces password entropy and MFA policies.</td>
+      </tr>
+      <tr>
+        <td><strong>Attending Doctor</strong></td>
+        <td>Physician / Specialist</td>
+        <td>Strictly scoped to their own assigned patients. Can view history, admit patients under their own care, and execute transfers.</td>
+        <td><strong>Zero Cross-Doctor Leakage:</strong> Cannot view or enumerate another doctor's patients, caseload stats, or activity feeds.</td>
+      </tr>
+      <tr>
+        <td><strong>Floor Nurse</strong></td>
+        <td>Charge Nurse / Triage</td>
+        <td>Updates clinical status (Critical, Under observation, Recovering, Stable, Discharged), progress notes, and follow-ups.</td>
+        <td>Restricted from patient admissions, transfers, deletions, and staff management.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. Core Operational Features</h2>
+
+  <h3>A. The Live Ward Census Bar</h3>
+  <p>
+    Rather than hiding inpatient health states inside separate sub-pages, the lead dashboard element visualizes the exact percentage of patients in each clinical state: <strong>Critical (🔴)</strong>, <strong>Under observation (🟡)</strong>, <strong>Recovering (🔵)</strong>, <strong>Stable (🟢)</strong>, and <strong>Discharged (⚪)</strong>. Clicking any segment automatically filters the patient list, letting administrators triage emergencies with a single click.
+  </p>
+
+  <h3>B. Smart Caseload Balancer & Capacity Safeguards</h3>
+  <p>
+    Every physician has a configured caseload ceiling (<code>maxPatients</code>). Profile cards render dynamic capacity meters: green under 80%, amber as capacity nears, and red with an alert when at or over quota.
+  </p>
+
+  <h3>C. Safe Caseload Transfers with Mandatory Audit Reasons</h3>
+  <p>
+    Physicians hand off patients using a drawer-based transfer workflow. The system verifies destination physician capacity in real-time, warns if the physician is over quota, and requires an explicit, sanitized reason that is permanently recorded in the patient's immutable clinical timeline.
+  </p>
+
+  <h3>D. Clash-Proof Duty Shifts & "On Duty Now" Badging</h3>
+  <p>
+    The scheduling engine divides clinical coverage into Day, Night, and On-Call shifts. Time overlaps are checked before insertion to prevent double-booking. Doctors on active duty are badged with a glowing "On duty now" indicator on the dashboard.
+  </p>
+
+  <h2>5. Security Hardening: The 10-Point Audit</h2>
+  <ul>
+    <li><strong>Zero-PHI in Server Logs (High):</strong> Request URLs are scrubbed to <code>/unmatched</code> on 404s, query strings are stripped from request loggers, and error handlers omit rejected clinical values.</li>
+    <li><strong>Activity Feed Revocation After Transfer (High):</strong> The moment a patient is transferred away, the former attending doctor's read privileges for that patient's timeline are revoked.</li>
+    <li><strong>Atomic Audited Mutations (Medium):</strong> All clinical mutations use multi-document MongoDB transactions (<code>withAuditTransaction</code>). If an activity log entry fails to write, the patient change automatically rolls back.</li>
+    <li><strong>Serverless-Persistent Rate Limiting (Medium):</strong> Backed by atomic MongoDB counters (<code>$inc</code>) and native TTL indexes to enforce rate quotas across Vercel serverless function recycles.</li>
+    <li><strong>Spreadsheet Formula Injection Defense (Low):</strong> Neutralizes CSV formula triggers (<code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>, <code>\n</code>, <code>\r</code>, <code>\t</code>).</li>
+    <li><strong>Query Execution Deadlines (Medium):</strong> <code>maxTimeMS: 2000</code> enforces strict timeouts on all searches and aggregations to prevent DoS resource exhaustion.</li>
+  </ul>
+
+  <h2>6. Automated Browser QA & Verification</h2>
+  <p>
+    We built an 85-point headless Chrome test suite with Puppeteer (<code>qa/browser-qa.mjs</code>) alongside 49 backend integration tests (<code>node:test</code>). It drives the live application through responsive sweeps (320px–1920px), stored XSS injection attacks, ReDoS patterns, and simulated API outages to ensure bulletproof resilience.
+  </p>
+
+  <h2>7. Live Production Links & Demo Credentials</h2>
+  <ul>
+    <li><strong>Frontend Application:</strong> <a href="https://doctor-tracker-three-gamma.vercel.app">https://doctor-tracker-three-gamma.vercel.app</a></li>
+    <li><strong>REST API Health Check:</strong> <a href="https://doctor-tracker-api-tawny.vercel.app/health">https://doctor-tracker-api-tawny.vercel.app/health</a></li>
+    <li><strong>GitHub Repository:</strong> <a href="https://github.com/mmhfarooque/doctor-tracker">https://github.com/mmhfarooque/doctor-tracker</a></li>
+    <li><strong>Demo Accounts (Password for all: <code>Password123!</code>):</strong>
+      <ul>
+        <li>Admin: <code>admin@doctortracker.com</code> (Full administrative control)</li>
+        <li>Doctor: <code>doctor@doctortracker.com</code> (Dr. Sarah Jenkins; strictly scoped to her 4 patients)</li>
+        <li>Nurse: <code>nurse@doctortracker.com</code> (Nina Patel; status updates, notes, follow-ups)</li>
+      </ul>
+    </li>
+  </ul>
+
+</body>
+</html>

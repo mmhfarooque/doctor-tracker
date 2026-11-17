@@ -10,7 +10,7 @@ Repo root: `~/Projects/Doctor Tracker` · GitHub (public): https://github.com/mm
 - Owner wants plain-language updates, measured time per task, and everything verified (tests + browser), not assumed.
 
 ## What the owner asked for
-Add 12 features (from a list Claude proposed):
+Add 12 features (architected by Mfaruk):
 1. Roles (admin / doctor / nurse) · 2. Patient status history + activity feed · 3. Transfer patients · 4. Follow-up dates (overdue / today / week)
 5. Filters saved in the URL · 6. CSV export + printable patient summary · 7. Discharge date + average length of stay · 8. Doctor capacity
 9. Shift / on-call schedule · 10. Critical-patient alerts · 11. Archive instead of delete (restore, undo) · 12. Bulk actions

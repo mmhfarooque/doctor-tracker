@@ -1,8 +1,8 @@
 # DOCTOR TRACKER — COMPLETE PROJECT HANDOVER & ARCHITECTURE LOG
-> **Target Audience:** Claude, Codex, OpenAI, Senior Engineers, and DevOps Automators.  
-> **Repository Path:** `<repo root>`  
-> **Current Status:** Feature-complete, hardened, tested (15 API tests). Deploy-ready (Render + Vercel), NOT deployed yet — owner wants a UI pass first.  
-> **Last Updated:** 2026-11-17 (review fixes, see §9)
+> **Creator & Lead Architect:** Mfaruk ([@mmhfarooque](https://github.com/mmhfarooque)) | [mfaruk.com/blog](https://mfaruk.com/blog)  
+> **Repository:** https://github.com/mmhfarooque/doctor-tracker  
+> **Current Status:** Feature-complete, 10 security audit fixes applied, 49 backend tests + 85 browser QA tests passing. Deployed live on Vercel.  
+> **Last Updated:** 2026-11-17 (Audit & Deployment, see §15 & §16)
 
 ---
 
@@ -231,7 +231,7 @@ npm run seed
 
 ---
 
-## 7. VPS Deployment Runbook (For Claude / Codex / DevOps)
+## 7. VPS Deployment Runbook (DevOps & Infrastructure)
 
 When deploying to the user's paid Linux VPS:
 
