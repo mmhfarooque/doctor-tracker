@@ -4,7 +4,7 @@
 **Demo login:** `admin@doctortracker.com` / `Password123!`
 
 ## 1. Description
-Doctor Tracker is a high-performance, full-stack healthcare administrative platform engineered to empower hospital operations with seamless physician workforce management, structured patient tracking, and real-time clinical analytics. Built with an decoupled architecture featuring a Next.js frontend client and a standalone Node.js/Express REST API backed by an indexed MongoDB cluster, Doctor Tracker delivers instantaneous search, multi-criteria filtering, and data aggregation to eliminate administrative overhead and enhance clinical visibility.
+Doctor Tracker is a secure admin portal for hospital administrators to manage doctors and the patients under their care: which doctor is treating whom, how many patients each doctor carries, and every patient's condition and clinical status. It pairs a Next.js frontend with a standalone Node.js/Express REST API on an indexed MongoDB database, and turns the data into a dashboard of caseloads, specialties, clinical status and admissions over time, with fast search, filtering and pagination throughout.
 
 ---
 
@@ -93,6 +93,7 @@ flowchart TD
         UI["Modern Responsive UI (Tailwind CSS)"]
         AuthCtx["Auth Context & Route Guards"]
         Recharts["Recharts Analytics Visualizations"]
+        DataHook["useApi hook (debounced search, AbortController, keeps previous data)"]
         AxiosClient["Axios HTTP Client + JWT Interceptors"]
     end
 
@@ -111,6 +112,8 @@ flowchart TD
 
     UI --> AuthCtx
     UI --> Recharts
+    UI --> DataHook
+    DataHook --> AxiosClient
     AuthCtx --> AxiosClient
     AxiosClient -->|"Bearer JWT + REST (JSON)"| Router
     Router --> JWTMiddleware
@@ -122,9 +125,9 @@ flowchart TD
 ```
 
 ### High-Level Data Flow:
-1. **Authentication Flow:** User enters credentials on `/login`. The client transmits `POST /api/auth/login`. The Express server verifies passwords with bcrypt, issues a signed JSON Web Token (JWT), and the client stores it securely in `localStorage` while synchronizing React state.
-2. **API Request Pipeline:** Axios automatically injects the `Authorization: Bearer <token>` header into all outbound requests. If an endpoint encounters a 401 Unauthorized status, the response interceptor seamlessly evicts the session and redirects the user to `/login`.
-3. **Optimized Aggregations:** When accessing `/` (Dashboard), the server executes a single MongoDB `$facet` / aggregation pipeline computing doctor totals, patient caseloads, specialty distributions, and timeline series without loading redundant document sets into Node.js memory.
+1. **Authentication Flow:** User enters credentials on `/login`. The client transmits `POST /api/auth/login`. The Express server verifies passwords with bcrypt, issues a signed JSON Web Token (JWT), and the client keeps it in `localStorage` and React state (the trade-off versus cookies is explained under Security Notes). On load the session is re-checked with `GET /api/auth/me`; tokens expire after 12 hours.
+2. **API Request Pipeline:** Axios automatically injects the `Authorization: Bearer <token>` header into all outbound requests. Pages fetch through one `useApi` hook: each list request is keyed by its query string, a newer request cancels the older one (AbortController), and the previous results stay on screen while the next page loads. A 401 response clears the session and the app routes to `/login`.
+3. **Dashboard aggregation:** `GET /api/dashboard/stats` runs seven independent queries in parallel (`Promise.all`): document counts, `$group` + `$lookup` pipelines for patients per doctor and patients per specialty, a `$group` by month over the last 12 months of admissions (bounded with a `$match` on the indexed `admissionDate`), a status breakdown and the five latest admissions. All grouping happens inside MongoDB, so only the small summary rows reach Node.js.
 
 ---
 
@@ -133,7 +136,8 @@ flowchart TD
 ### Decision 1: React Context API + Axios Interceptors over Redux Toolkit
 * **Context:** The application requires global management of user authentication, route protection guards, and session persistence across views.
 * **Why not Redux?** Redux introduces substantial boilerplate (slices, dispatchers, selectors, store providers) which increases client bundle size without providing tangible benefits for this application scope where server state is fetched declaratively with lightweight query parameters.
-* **The Solution:** We implemented a streamlined `AuthContext` coupled with Axios request/response interceptors. Token attachment, authorization expiry detection, and route guards are handled cleanly with minimal re-render overhead and zero third-party state library bloat.
+* **The Solution:** A small `AuthContext` holds only the session; Axios interceptors attach the token and report expiry. Server data is not copied into a global store at all: each page reads it through the `useApi` hook, keyed by the page's filters, so the URL-like query string is the single source of truth and there is nothing to keep in sync.
+* **Trade-off:** no cross-page cache (revisiting a page refetches). With server-side pagination and indexed queries each request is small, so simplicity won over adding a cache library.
 
 ### Decision 2: Standalone Express Server vs. Next.js API Routes (Route Handlers)
 * **Context:** The specification permits multiple architectures but strongly emphasizes a separate standalone backend service communicating via REST principles.
@@ -153,6 +157,23 @@ flowchart TD
 * **Forms never leave the list.** Create and edit happen in a side panel; deletes need confirmation; every save shows a short confirmation message.
 * **Responsive.** Tables switch to cards under 768 px; no page scrolls sideways at 390 px. Keyboard focus is visible and reduced-motion preferences are respected.
 * Typeface: IBM Plex Sans (self-hosted via `@fontsource`), with tabular figures for numbers.
+
+---
+
+## Performance & Optimization
+
+**Database**
+* Indexes match the real query shapes: `{specialization, createdAt}`, `{hospital, createdAt}`, `status`, `createdAt` and unique `email` on doctors; `{doctor, createdAt}`, `{condition, status}`, `admissionDate`, `status`, `createdAt` on patients. Duplicate and unused indexes were removed (`npm run sync-indexes`).
+* Every list endpoint paginates on the server (`skip`/`limit`, max 100 per page) and runs the count and the page query in parallel. Sort fields are whitelisted.
+* Search input is regex-escaped and capped at 100 characters, so user text can never become an expensive pattern.
+
+**Frontend: avoiding unnecessary work and re-renders**
+* Search boxes are debounced (300 ms), so typing sends one request per pause, not one per keystroke.
+* Superseded requests are cancelled, and responses can never arrive out of order.
+* Query strings are memoised (`useMemo`), so effects only re-run when a filter actually changes.
+* Forms, drawers and the quick-search palette are mounted only while open, and the doctor list for the admit form is fetched only when that form opens.
+* Previous results stay visible while the next page loads (no full-page spinners or layout jumps).
+* The client is linted with React 19's hook rules (no state set synchronously inside effects, no refs read during render).
 
 ---
 
@@ -206,7 +227,7 @@ Doctor Tracker/
 │   ├── src/
 │   │   ├── app/
 │   │   │   ├── globals.css              # Custom styling & scrollbar
-│   │   │   ├── layout.jsx               # Root layout with AuthProvider & AppLayout
+│   │   │   ├── layout.jsx               # Root layout with AuthProvider, ToastProvider & AppShell
 │   │   │   ├── page.jsx                 # Analytics Dashboard
 │   │   │   ├── login/page.jsx           # JWT Login View
 │   │   │   ├── doctors/
@@ -219,7 +240,7 @@ Doctor Tracker/
 │   │   │   ├── dashboard/               # WardStatus, AdmissionsChart (Recharts), BarList
 │   │   │   └── layout/                  # AppShell, Sidebar + account menu, CommandPalette, Logo
 │   │   ├── context/                     # AuthContext with Route Guards
-│   │   ├── hooks/                       # useDebounce (search inputs)
+│   │   ├── hooks/                       # useApi (data fetching), useDebounce, useHydrated
 │   │   └── lib/                         # Axios client instance & interceptors
 │   ├── .env.example
 │   ├── package.json
