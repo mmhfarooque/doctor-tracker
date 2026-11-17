@@ -1,7 +1,10 @@
 /**
- * Middleware to sanitize user input against NoSQL Injection Attacks.
- * Recursively removes any keys starting with '$' or containing '.' in req.body, req.query, and req.params.
+ * Middleware to sanitize user input against NoSQL Injection and Prototype Pollution Attacks.
+ * Recursively removes any keys starting with '$' or containing '.', as well as
+ * prototype pollution keys (__proto__, constructor, prototype) in req.body, req.query, and req.params.
  */
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function cleanObject(obj) {
   if (obj === null || typeof obj !== 'object') {
     return;
@@ -17,8 +20,12 @@ function cleanObject(obj) {
   }
 
   for (const key of Object.keys(obj)) {
-    // If key starts with '$' or contains '.', delete it to prevent MongoDB operator injection
-    if (key.startsWith('$') || key.includes('.')) {
+    // Check for MongoDB operators, dotted property paths, or prototype pollution attempts
+    if (
+      key.startsWith('$') ||
+      key.includes('.') ||
+      FORBIDDEN_KEYS.has(key)
+    ) {
       delete obj[key];
     } else if (typeof obj[key] === 'object' && obj[key] !== null) {
       cleanObject(obj[key]);

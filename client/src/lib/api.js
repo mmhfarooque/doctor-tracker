@@ -12,7 +12,8 @@ api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('token');
-      if (token) {
+      // Validate token structure before attaching (header.payload.signature)
+      if (token && typeof token === 'string' && token.split('.').length === 3) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     }

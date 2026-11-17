@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import hpp from 'hpp';
 import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
@@ -29,11 +30,23 @@ app.use(
   })
 );
 
-// 2. CORS Configuration
-const allowedOrigin = process.env.CORS_ORIGIN || '*';
+// 2. CORS Configuration with origin validation
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: allowedOrigin,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (curl, mobile, server-side tools) or matching allowed list
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        callback(new Error('Blocked by CORS policy'));
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -67,10 +80,11 @@ app.use('/api', apiLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
-// 4. Body Parsers with payload limits & NoSQL Injection Sanitization
+// 4. Body Parsers with payload limits & NoSQL / Parameter Pollution Sanitization
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(mongoSanitizeMiddleware);
+app.use(hpp());
 
 // Logging
 if (process.env.NODE_ENV !== 'test') {
