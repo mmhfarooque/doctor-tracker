@@ -481,3 +481,24 @@ export const deletePatientFromDoctor = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Distinct filter values (specializations, hospitals) for the doctor filters
+// @route   GET /api/doctors/filters
+// @access  Private
+export const getDoctorFilters = async (req, res, next) => {
+  try {
+    const [specializations, hospitals] = await Promise.all([
+      Doctor.distinct('specialization'),
+      Doctor.distinct('hospital'),
+    ]);
+    res.json({
+      success: true,
+      data: {
+        specializations: specializations.sort(),
+        hospitals: hospitals.sort(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

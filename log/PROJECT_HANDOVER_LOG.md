@@ -348,4 +348,19 @@ Full review of backend, frontend and DB, then fixes. All verified: `npm test` (1
 
 ---
 
+## 10. UI Redesign — 2026-11-17 (night)
+
+Owner asked for a complete, user-friendly admin UI (old one had the user badge top-right but Sign out bottom-left, etc.). All spec features kept.
+
+* Concept: "ward board". Dark pine sidebar, cool grey canvas, IBM Plex Sans (self-hosted `@fontsource/ibm-plex-sans`; `next/font/google` failed in `next build`). Status colours reserved for clinical status (`lib/constants.js`).
+* Shell: `components/layout/AppShell.jsx` + `Sidebar.jsx` (nav + search button + single account menu with Sign out), mobile top bar, `CommandPalette.jsx` (Ctrl/⌘K searches doctors + patients).
+* UI kit `components/ui/`: Drawer, ConfirmDialog, Menu, Toast, Pagination, SearchInput, FilterChips, StatusBadge, Avatar, Skeleton, EmptyState, PageHeader, Field. Old Modal/Navbar/AppLayout/StatCard/AnalyticsCharts removed.
+* Forms `components/forms/DoctorForm.jsx`, `PatientForm.jsx` (side panel, reused on every page).
+* Dashboard: clinical-status bar (segments link to `/patients?status=`), KPI strip, 12-month admissions chart, patients by specialty (links to `/doctors?specialization=`), caseload per doctor, recent admissions.
+* Doctors / Patients / Doctor profile: table on desktop, cards on mobile; status tabs (patients); "More filters" row; filter chips; row menus; sorting.
+* API additions: `GET /api/doctors/filters` (distinct specialties + hospitals); dashboard `specialtyDistribution[].patients`. Tests 16/16.
+* Verified: `next build` OK, screenshots desktop + mobile in docs/screenshots, no horizontal scroll at 390 px on any page.
+
+---
+
 *This document serves as the single source of truth for the Doctor Tracker full-stack codebase. Any subsequent AI assistant or software engineer can read this file and have complete technical context.*

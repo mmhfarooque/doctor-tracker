@@ -20,6 +20,7 @@ export const getDashboardStats = async (req, res, next) => {
       specialtyDistribution,
       statusDistribution,
       recentPatients,
+      patientsBySpecialty,
     ] = await Promise.all([
       Doctor.estimatedDocumentCount(),
       Patient.estimatedDocumentCount(),
@@ -128,7 +129,18 @@ export const getDashboardStats = async (req, res, next) => {
         },
       ]),
       Patient.find().populate('doctor', 'name specialization').sort({ createdAt: -1 }).limit(5).select('-__v').lean(),
+      Patient.aggregate([
+        { $lookup: { from: 'doctors', localField: 'doctor', foreignField: '_id', as: 'doc' } },
+        { $unwind: '$doc' },
+        { $group: { _id: '$doc.specialization', patients: { $sum: 1 } } },
+      ]),
     ]);
+
+    // Each specialty: number of doctors and number of patients under them
+    const patientsBySpec = Object.fromEntries(patientsBySpecialty.map((p) => [p._id, p.patients]));
+    const specialties = specialtyDistribution
+      .map((s) => ({ ...s, patients: patientsBySpec[s.specialty] || 0 }))
+      .sort((a, b) => b.patients - a.patients);
 
     const avgPatientsPerDoctor = totalDoctors > 0 ? (totalPatients / totalDoctors).toFixed(1) : 0;
 
@@ -142,7 +154,7 @@ export const getDashboardStats = async (req, res, next) => {
         },
         patientsPerDoctor,
         monthlyRegistrations,
-        specialtyDistribution,
+        specialtyDistribution: specialties,
         statusDistribution,
         recentPatients,
       },

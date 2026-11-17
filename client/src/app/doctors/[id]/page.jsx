@@ -1,532 +1,425 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  UserCheck,
-  Building2,
-  Mail,
-  Phone,
-  Calendar,
-  UserPlus,
-  Trash2,
-  Edit,
-  Search,
-  AlertCircle,
-  Users,
-  Clock,
-  ShieldAlert,
-} from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, CalendarDays, Award, Pencil, UserPlus, MoreHorizontal, Trash2, Users } from 'lucide-react';
 import api from '../../../lib/api';
 import useDebounce from '../../../hooks/useDebounce';
-import Modal from '../../../components/common/Modal';
-import Pagination from '../../../components/common/Pagination';
+import Avatar from '../../../components/ui/Avatar';
+import StatusBadge from '../../../components/ui/StatusBadge';
+import SearchInput from '../../../components/ui/SearchInput';
+import Pagination from '../../../components/ui/Pagination';
+import Menu from '../../../components/ui/Menu';
+import EmptyState from '../../../components/ui/EmptyState';
+import ConfirmDialog from '../../../components/ui/ConfirmDialog';
+import Skeleton, { TableSkeleton } from '../../../components/ui/Skeleton';
+import DoctorForm from '../../../components/forms/DoctorForm';
+import PatientForm from '../../../components/forms/PatientForm';
+import { useToast } from '../../../components/ui/Toast';
+import { DOCTOR_STATUSES, PATIENT_STATUSES, findStatus } from '../../../lib/constants';
+import { apiError, formatDate } from '../../../lib/format';
 
-export default function DoctorDetailPage() {
+const LIMIT = 10;
+
+export default function DoctorProfilePage() {
   const { id } = useParams();
   const router = useRouter();
+  const notify = useToast();
 
   const [doctor, setDoctor] = useState(null);
+  const [doctorError, setDoctorError] = useState('');
+
   const [patients, setPatients] = useState([]);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // Filters for doctor's patient list
   const [search, setSearch] = useState('');
-  const debouncedSearch = useDebounce(search, 300);
-  const requestSeq = useRef(0); // ignore responses from requests that a newer one has superseded
-  const [conditionFilter, setConditionFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
+  const debouncedSearch = useDebounce(search, 300);
+  const requestSeq = useRef(0);
 
-  // Add Patient Modal
-  const [showAddPatientModal, setShowAddPatientModal] = useState(false);
-  const [newPatient, setNewPatient] = useState({
-    name: '',
-    age: '',
-    gender: 'Male',
-    condition: '',
-    status: 'Stable',
-    phone: '',
-    email: '',
-    notes: '',
-  });
-  const [submittingPatient, setSubmittingPatient] = useState(false);
-  const [patientError, setPatientError] = useState('');
+  const [editingDoctor, setEditingDoctor] = useState(false);
+  const [patientForm, setPatientForm] = useState(undefined); // undefined closed, null admit, object edit
+  const [toRemove, setToRemove] = useState(null);
+  const [confirmDoctorDelete, setConfirmDoctorDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [dialogError, setDialogError] = useState('');
 
-  // Edit Doctor Modal
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editDoctorData, setEditDoctorData] = useState({});
-  const [updatingDoctor, setUpdatingDoctor] = useState(false);
-
-  // Delete Patient confirmation
-  const [patientToDelete, setPatientToDelete] = useState(null);
-  const [deletingPatient, setDeletingPatient] = useState(false);
-
-  // Fetch Doctor details & their patients
-  const fetchDoctorData = useCallback(async () => {
-    if (!id) return;
-    const seq = ++requestSeq.current;
+  const fetchDoctor = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch doctor details
-      const docRes = await api.get(`/doctors/${id}`);
-      if (seq !== requestSeq.current) return;
-      if (docRes.data.success) {
-        setDoctor(docRes.data.data);
-        setEditDoctorData(docRes.data.data);
-      }
-
-      // Fetch patients under this doctor
-      const params = new URLSearchParams();
-      params.append('page', page);
-      params.append('limit', 10);
-      if (debouncedSearch.trim()) params.append('search', debouncedSearch.trim());
-      if (conditionFilter !== 'all') params.append('condition', conditionFilter);
-      if (statusFilter !== 'all') params.append('status', statusFilter);
-
-      const patRes = await api.get(`/doctors/${id}/patients?${params.toString()}`);
-      if (seq !== requestSeq.current) return;
-      if (patRes.data.success) {
-        setPatients(patRes.data.data);
-        setPagination(patRes.data.pagination);
-      }
+      const res = await api.get(`/doctors/${id}`);
+      setDoctor(res.data.data);
     } catch (err) {
+      setDoctorError(apiError(err, 'This doctor could not be loaded.'));
+    }
+  }, [id]);
+
+  const fetchRoster = useCallback(async () => {
+    const seq = ++requestSeq.current;
+    setLoading(true);
+    const q = new URLSearchParams({ page, limit: LIMIT });
+    if (debouncedSearch.trim()) q.set('search', debouncedSearch.trim());
+    if (status) q.set('status', status);
+    try {
+      const res = await api.get(`/doctors/${id}/patients?${q}`);
       if (seq !== requestSeq.current) return;
-      setError(err.response?.data?.message || 'Failed to load doctor profile');
+      setPatients(res.data.data);
+      setPagination(res.data.pagination);
+    } catch {
+      if (seq !== requestSeq.current) return;
+      setPatients([]);
     } finally {
       if (seq === requestSeq.current) setLoading(false);
     }
-  }, [id, page, debouncedSearch, conditionFilter, statusFilter]);
+  }, [id, page, debouncedSearch, status]);
 
   useEffect(() => {
-    fetchDoctorData();
-  }, [fetchDoctorData]);
+    fetchDoctor();
+  }, [fetchDoctor]);
 
-  // Handle Add Patient Under This Doctor
-  const handleAddPatient = async (e) => {
-    e.preventDefault();
-    setPatientError('');
-    setSubmittingPatient(true);
+  useEffect(() => {
+    fetchRoster();
+  }, [fetchRoster]);
 
+  const refreshAll = () => {
+    fetchDoctor();
+    fetchRoster();
+  };
+
+  const removePatient = async () => {
+    setBusy(true);
+    setDialogError('');
     try {
-      const res = await api.post(`/doctors/${id}/patients`, newPatient);
-      if (res.data.success) {
-        setShowAddPatientModal(false);
-        setNewPatient({
-          name: '',
-          age: '',
-          gender: 'Male',
-          condition: '',
-          status: 'Stable',
-          phone: '',
-          email: '',
-          notes: '',
-        });
-        fetchDoctorData();
-      }
+      await api.delete(`/doctors/${id}/patients/${toRemove._id}`);
+      notify(`${toRemove.name} removed from ${doctor.name}'s patients`);
+      setToRemove(null);
+      if (patients.length === 1 && page > 1) setPage(page - 1);
+      refreshAll();
     } catch (err) {
-      setPatientError(err.response?.data?.message || 'Error adding patient');
+      setDialogError(apiError(err, 'The patient could not be removed.'));
     } finally {
-      setSubmittingPatient(false);
+      setBusy(false);
     }
   };
 
-  // Handle Delete Patient from Doctor's list
-  const handleDeletePatient = async () => {
-    if (!patientToDelete) return;
-    setDeletingPatient(true);
-
+  const deleteDoctor = async () => {
+    setBusy(true);
+    setDialogError('');
     try {
-      const res = await api.delete(`/doctors/${id}/patients/${patientToDelete._id}`);
-      if (res.data.success) {
-        setPatientToDelete(null);
-        fetchDoctorData();
-      }
+      await api.delete(`/doctors/${id}`);
+      notify(`${doctor.name} deleted`);
+      router.push('/doctors');
     } catch (err) {
-      alert(err.response?.data?.message || 'Error removing patient');
+      setDialogError(apiError(err, 'The doctor could not be deleted.'));
     } finally {
-      setDeletingPatient(false);
+      setBusy(false);
     }
   };
 
-  // Handle Update Doctor Info
-  const handleUpdateDoctor = async (e) => {
-    e.preventDefault();
-    setUpdatingDoctor(true);
-
-    try {
-      const res = await api.put(`/doctors/${id}`, editDoctorData);
-      if (res.data.success) {
-        setDoctor(res.data.data);
-        setShowEditModal(false);
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || 'Error updating doctor profile');
-    } finally {
-      setUpdatingDoctor(false);
-    }
+  const closeDialogs = () => {
+    setToRemove(null);
+    setConfirmDoctorDelete(false);
+    setDialogError('');
   };
 
-  if (loading && !doctor) {
+  if (doctorError) {
     return (
-      <div className="space-y-6">
-        <div className="h-6 w-32 animate-pulse rounded bg-slate-200" />
-        <div className="h-48 animate-pulse rounded-2xl bg-slate-200" />
-        <div className="h-64 animate-pulse rounded-2xl bg-slate-200" />
-      </div>
-    );
-  }
-
-  if (error || !doctor) {
-    return (
-      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
-        <p className="font-semibold">Error Loading Profile</p>
-        <p className="text-xs text-rose-600 mt-1">{error || 'Doctor not found'}</p>
-        <Link
-          href="/doctors"
-          className="mt-3 inline-block rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700"
-        >
-          Return to Doctors Roster
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Back Link */}
-      <div>
-        <Link
-          href="/doctors"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span>Back to Physicians Roster</span>
-        </Link>
-      </div>
-
-      {/* Doctor Summary Header Card */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-start gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-teal-600 text-white font-extrabold text-2xl shadow-lg shadow-teal-600/20 shrink-0">
-              {doctor.name.charAt(4) || 'D'}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-slate-900">{doctor.name}</h1>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                  {doctor.status}
-                </span>
-              </div>
-              <p className="text-xs font-semibold text-teal-600">{doctor.specialization}</p>
-
-              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600">
-                <div className="flex items-center gap-1.5">
-                  <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{doctor.hospital}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{doctor.email}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Phone className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{doctor.phone}</span>
-                </div>
-              </div>
-
-              {doctor.bio && (
-                <p className="mt-3 text-xs text-slate-500 leading-relaxed max-w-2xl">
-                  {doctor.bio}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setShowEditModal(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <Edit className="h-3.5 w-3.5" />
-              <span>Edit Details</span>
-            </button>
-            <button
-              onClick={() => setShowAddPatientModal(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-teal-700"
-            >
-              <UserPlus className="h-4 w-4" />
-              <span>Add Patient</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Doctor's Patients Section Header */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Assigned Patient Roster</h2>
-            <p className="text-xs text-slate-400">
-              Active patients under direct care of {doctor.name} ({pagination.total} total)
-            </p>
-          </div>
-
-          {/* Quick Search */}
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search patients..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-900 focus:border-teal-600 focus:bg-white focus:outline-none"
-            />
-          </div>
-        </div>
-
-        {/* Patients Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                <th className="pb-3 pl-2">Patient Name</th>
-                <th className="pb-3">Age / Gender</th>
-                <th className="pb-3">Diagnosis / Condition</th>
-                <th className="pb-3">Status</th>
-                <th className="pb-3">Contact</th>
-                <th className="pb-3">Admission</th>
-                <th className="pb-3 pr-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
-              {patients.length > 0 ? (
-                patients.map((p) => (
-                  <tr key={p._id} className="hover:bg-slate-50/50">
-                    <td className="py-3 pl-2 font-semibold text-slate-900">{p.name}</td>
-                    <td className="py-3">{p.age} yrs • {p.gender}</td>
-                    <td className="py-3 font-medium text-slate-800">{p.condition}</td>
-                    <td className="py-3">
-                      <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          p.status === 'Critical'
-                            ? 'bg-rose-100 text-rose-700'
-                            : p.status === 'Recovering'
-                            ? 'bg-sky-100 text-sky-700'
-                            : p.status === 'Under Observation'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}
-                      >
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className="py-3 text-slate-500">{p.phone || p.email || '—'}</td>
-                    <td className="py-3 text-slate-500">{new Date(p.admissionDate).toLocaleDateString()}</td>
-                    <td className="py-3 pr-2 text-right">
-                      <button
-                        onClick={() => setPatientToDelete(p)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                        title="Remove Patient From Doctor"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">
-                    No patients currently assigned to this doctor.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <Pagination
-          page={pagination.page}
-          totalPages={pagination.totalPages}
-          total={pagination.total}
-          limit={pagination.limit}
-          onPageChange={(p) => setPage(p)}
+      <div className="panel">
+        <EmptyState
+          icon={Users}
+          title="Doctor not found"
+          message={doctorError}
+          action={
+            <Link href="/doctors" className="btn btn-secondary">
+              Back to doctors
+            </Link>
+          }
         />
       </div>
+    );
+  }
 
-      {/* Add Patient Modal */}
-      <Modal
-        isOpen={showAddPatientModal}
-        onClose={() => setShowAddPatientModal(false)}
-        title={`Admit Patient under ${doctor.name}`}
-      >
-        {patientError && (
-          <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-            {patientError}
+  const facts = doctor
+    ? [
+        { icon: Building2, label: 'Hospital', value: doctor.hospital },
+        { icon: Mail, label: 'Email', value: doctor.email, href: `mailto:${doctor.email}` },
+        { icon: Phone, label: 'Phone', value: doctor.phone, href: `tel:${doctor.phone}` },
+        { icon: Award, label: 'Experience', value: `${doctor.experienceYears} years` },
+        { icon: CalendarDays, label: 'On record since', value: formatDate(doctor.createdAt) },
+      ]
+    : [];
+
+  return (
+    <>
+      <Link href="/doctors" className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-ink">
+        <ArrowLeft className="h-4 w-4" />
+        Doctors
+      </Link>
+
+      {/* Profile */}
+      <section className="panel mb-6 overflow-hidden">
+        {!doctor ? (
+          <div className="flex items-center gap-5 p-6">
+            <Skeleton className="h-16 w-16 rounded-full" />
+            <div className="flex-1 space-y-3">
+              <Skeleton className="h-6 w-1/3" />
+              <Skeleton className="h-4 w-1/4" />
+            </div>
           </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-5 p-5 sm:p-7 md:flex-row md:items-start">
+              <Avatar name={doctor.name} size="lg" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.01em] text-ink">{doctor.name}</h1>
+                  <StatusBadge status={findStatus(DOCTOR_STATUSES, doctor.status)} />
+                </div>
+                <p className="mt-1 text-[15px] text-ink-soft">
+                  {doctor.specialization}
+                  <span className="text-faint"> with </span>
+                  <span className="num font-medium text-ink">
+                    {doctor.patientCount} patient{doctor.patientCount === 1 ? '' : 's'}
+                  </span>
+                </p>
+                {doctor.bio && <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted">{doctor.bio}</p>}
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button className="btn btn-secondary" onClick={() => setEditingDoctor(true)}>
+                  <Pencil className="h-4 w-4" />
+                  Edit
+                </button>
+                <button className="btn btn-primary" onClick={() => setPatientForm(null)}>
+                  <UserPlus className="h-4 w-4" />
+                  Admit patient
+                </button>
+                <Menu
+                  items={[{ key: 'del', label: 'Delete doctor', icon: Trash2, danger: true, onClick: () => setConfirmDoctorDelete(true) }]}
+                  trigger={({ toggle, open }) => (
+                    <button
+                      className="btn btn-secondary w-10 px-0"
+                      onClick={toggle}
+                      aria-haspopup="menu"
+                      aria-expanded={open}
+                      aria-label="More actions"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                  )}
+                />
+              </div>
+            </div>
+            <dl className="grid grid-cols-1 gap-px border-t border-line bg-line sm:grid-cols-2 lg:grid-cols-5">
+              {facts.map((f) => (
+                <div key={f.label} className="flex items-start gap-3 bg-[#FAFBFB] px-5 py-4 sm:px-7 lg:px-5">
+                  <f.icon className="mt-0.5 h-4 w-4 shrink-0 text-faint" />
+                  <div className="min-w-0">
+                    <dt className="text-xs text-muted">{f.label}</dt>
+                    <dd className="mt-0.5 truncate text-sm font-medium text-ink">
+                      {f.href ? (
+                        <a href={f.href} className="hover:text-pine-700 hover:underline">
+                          {f.value}
+                        </a>
+                      ) : (
+                        f.value
+                      )}
+                    </dd>
+                  </div>
+                </div>
+              ))}
+            </dl>
+          </>
         )}
+      </section>
 
-        <form onSubmit={handleAddPatient} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700">Patient Full Name *</label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Jessica Alba"
-              value={newPatient.name}
-              onChange={(e) => setNewPatient({ ...newPatient, name: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-900 focus:border-teal-600 focus:bg-white focus:outline-none"
+      {/* Patient roster */}
+      <section className="panel overflow-visible" aria-labelledby="roster-title">
+        <div className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+          <h2 id="roster-title" className="text-[15px] font-semibold text-ink">
+            Patients under this doctor
+          </h2>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <SearchInput
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
+              placeholder="Search name, condition or phone"
+              className="sm:w-72"
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700">Age *</label>
-              <input
-                type="number"
-                min="0"
-                max="130"
-                required
-                value={newPatient.age}
-                onChange={(e) => setNewPatient({ ...newPatient, age: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-900 focus:border-teal-600 focus:bg-white focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700">Gender *</label>
-              <select
-                value={newPatient.gender}
-                onChange={(e) => setNewPatient({ ...newPatient, gender: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-900 focus:border-teal-600 focus:bg-white focus:outline-none"
-              >
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700">Diagnosis / Condition *</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Hypertension"
-                value={newPatient.condition}
-                onChange={(e) => setNewPatient({ ...newPatient, condition: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-900 focus:border-teal-600 focus:bg-white focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700">Clinical Status</label>
-              <select
-                value={newPatient.status}
-                onChange={(e) => setNewPatient({ ...newPatient, status: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-900 focus:border-teal-600 focus:bg-white focus:outline-none"
-              >
-                <option value="Stable">Stable</option>
-                <option value="Critical">Critical</option>
-                <option value="Under Observation">Under Observation</option>
-                <option value="Recovering">Recovering</option>
-                <option value="Discharged">Discharged</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700">Phone</label>
-              <input
-                type="tel"
-                value={newPatient.phone}
-                onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-900 focus:border-teal-600 focus:bg-white focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700">Email</label>
-              <input
-                type="email"
-                value={newPatient.email}
-                onChange={(e) => setNewPatient({ ...newPatient, email: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-900 focus:border-teal-600 focus:bg-white focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700">Clinical Notes</label>
-            <textarea
-              rows={2}
-              value={newPatient.notes}
-              onChange={(e) => setNewPatient({ ...newPatient, notes: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs text-slate-900 focus:border-teal-600 focus:bg-white focus:outline-none"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setShowAddPatientModal(false)}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            <select
+              className="select sm:w-48"
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Clinical status"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submittingPatient}
-              className="rounded-xl bg-teal-600 px-5 py-2 text-xs font-bold text-white hover:bg-teal-700 disabled:opacity-50"
-            >
-              {submittingPatient ? 'Admitting...' : 'Admit Patient'}
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Delete Patient Confirmation Modal */}
-      <Modal
-        isOpen={!!patientToDelete}
-        onClose={() => setPatientToDelete(null)}
-        title="Remove Patient"
-        maxWidth="max-w-md"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center gap-3 rounded-xl bg-rose-50 p-3 text-rose-700 text-xs">
-            <ShieldAlert className="h-5 w-5 shrink-0" />
-            <span>
-              Are you sure you want to remove <strong>{patientToDelete?.name}</strong> from this doctor&apos;s roster? This action cannot be undone.
-            </span>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-            <button
-              onClick={() => setPatientToDelete(null)}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleDeletePatient}
-              disabled={deletingPatient}
-              className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
-            >
-              {deletingPatient ? 'Removing...' : 'Confirm Remove'}
-            </button>
+              <option value="">Any status</option>
+              {PATIENT_STATUSES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-      </Modal>
-    </div>
+
+        <div className="border-t border-line">
+          {loading && !patients.length ? (
+            <TableSkeleton rows={4} />
+          ) : !patients.length ? (
+            <EmptyState
+              icon={Users}
+              title={search || status ? 'No patients match' : 'No patients yet'}
+              message={
+                search || status ? 'Try a different search or status.' : `Admit a patient under ${doctor?.name || 'this doctor'} to start their list.`
+              }
+              action={
+                !(search || status) && (
+                  <button className="btn btn-primary" onClick={() => setPatientForm(null)}>
+                    <UserPlus className="h-4 w-4" />
+                    Admit patient
+                  </button>
+                )
+              }
+            />
+          ) : (
+            <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
+              <table className="hidden w-full md:table">
+                <thead className="table-head">
+                  <tr>
+                    <th scope="col">Patient</th>
+                    <th scope="col">Condition</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Admitted</th>
+                    <th scope="col">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {patients.map((p) => (
+                    <tr key={p._id} className="table-row group cursor-pointer hover:bg-[#FAFBFB]" onClick={() => setPatientForm(p)}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          <Avatar name={p.name} size="sm" />
+                          <div>
+                            <span className="block font-medium text-ink group-hover:text-pine-700">{p.name}</span>
+                            <span className="num block text-[13px] text-muted">
+                              {p.age} yrs, {p.gender}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="text-ink">{p.condition}</td>
+                      <td>
+                        <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} />
+                      </td>
+                      <td className="num whitespace-nowrap text-ink-soft">{formatDate(p.admissionDate)}</td>
+                      <td className="w-12 text-right" onClick={(e) => e.stopPropagation()}>
+                        <Menu
+                          items={[
+                            { key: 'edit', label: 'Edit patient', icon: Pencil, onClick: () => setPatientForm(p) },
+                            { key: 'rm', label: 'Remove from list', icon: Trash2, danger: true, onClick: () => setToRemove(p) },
+                          ]}
+                          trigger={({ toggle, open }) => (
+                            <button
+                              className="icon-btn"
+                              onClick={toggle}
+                              aria-haspopup="menu"
+                              aria-expanded={open}
+                              aria-label={`Actions for ${p.name}`}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          )}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <ul className="divide-y divide-line md:hidden">
+                {patients.map((p) => (
+                  <li key={p._id} className="flex items-start gap-3 px-4 py-4">
+                    <button type="button" onClick={() => setPatientForm(p)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                      <Avatar name={p.name} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium text-ink">{p.name}</span>
+                        <span className="block truncate text-[13px] text-muted">
+                          {p.condition}, {p.age} yrs
+                        </span>
+                        <span className="mt-2 flex items-center gap-2">
+                          <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} size="sm" />
+                          <span className="num text-xs text-faint">{formatDate(p.admissionDate)}</span>
+                        </span>
+                      </span>
+                    </button>
+                    <Menu
+                      items={[
+                        { key: 'edit', label: 'Edit patient', icon: Pencil, onClick: () => setPatientForm(p) },
+                        { key: 'rm', label: 'Remove from list', icon: Trash2, danger: true, onClick: () => setToRemove(p) },
+                      ]}
+                      trigger={({ toggle, open }) => (
+                        <button
+                          className="icon-btn -mr-2"
+                          onClick={toggle}
+                          aria-haspopup="menu"
+                          aria-expanded={open}
+                          aria-label={`Actions for ${p.name}`}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                      )}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <Pagination page={page} totalPages={pagination.totalPages} total={pagination.total} limit={LIMIT} onPageChange={setPage} noun="patients" />
+      </section>
+
+      <DoctorForm open={editingDoctor} doctor={doctor} onClose={() => setEditingDoctor(false)} onSaved={fetchDoctor} />
+      <PatientForm
+        open={patientForm !== undefined}
+        patient={patientForm || null}
+        fixedDoctor={patientForm ? undefined : doctor}
+        doctors={doctor ? [doctor] : []}
+        onClose={() => setPatientForm(undefined)}
+        onSaved={refreshAll}
+      />
+      <ConfirmDialog
+        open={Boolean(toRemove)}
+        title={`Remove ${toRemove?.name}?`}
+        message={`${toRemove?.name} is removed from ${doctor?.name}'s patients and their record is deleted. This cannot be undone.`}
+        confirmLabel="Remove patient"
+        busy={busy}
+        error={dialogError}
+        onConfirm={removePatient}
+        onCancel={closeDialogs}
+      />
+      <ConfirmDialog
+        open={confirmDoctorDelete}
+        title={`Delete ${doctor?.name}?`}
+        message={
+          doctor?.patientCount
+            ? `${doctor.name} still has ${doctor.patientCount} patient${doctor.patientCount === 1 ? '' : 's'}. Remove or reassign them first; the delete will be refused until then.`
+            : 'The doctor is removed from the directory permanently.'
+        }
+        confirmLabel="Delete doctor"
+        busy={busy}
+        error={dialogError}
+        onConfirm={deleteDoctor}
+        onCancel={closeDialogs}
+      />
+    </>
   );
 }

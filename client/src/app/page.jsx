@@ -1,207 +1,237 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import {
-  UserCheck,
-  Users,
-  TrendingUp,
-  Activity,
-  PlusCircle,
-  Calendar,
-  Building2,
-  Stethoscope,
-  ArrowUpRight,
-} from 'lucide-react';
+import { UserPlus, Stethoscope, RefreshCw } from 'lucide-react';
 import api from '../lib/api';
-import StatCard from '../components/dashboard/StatCard';
-import AnalyticsCharts from '../components/dashboard/AnalyticsCharts';
+import { useAuth } from '../context/AuthContext';
+import PageHeader from '../components/ui/PageHeader';
+import WardStatus from '../components/dashboard/WardStatus';
+import AdmissionsChart from '../components/dashboard/AdmissionsChart';
+import BarList from '../components/dashboard/BarList';
+import Avatar from '../components/ui/Avatar';
+import StatusBadge from '../components/ui/StatusBadge';
+import Skeleton from '../components/ui/Skeleton';
+import DoctorForm from '../components/forms/DoctorForm';
+import PatientForm from '../components/forms/PatientForm';
+import { PATIENT_STATUSES, findStatus } from '../lib/constants';
+import { apiError, formatDate, greeting, monthLabel } from '../lib/format';
+
+// The API only returns months that had admissions; fill the last 12 months so gaps show as zero.
+const lastTwelveMonths = (rows = []) => {
+  const byPeriod = Object.fromEntries(rows.map((r) => [r.period, r.admissions]));
+  const now = new Date();
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+    const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    return {
+      period,
+      label: monthLabel(period),
+      full: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+      admissions: byPeriod[period] || 0,
+    };
+  });
+};
+
+function Panel({ title, description, action, children, className = '' }) {
+  return (
+    <section className={`panel flex min-w-0 flex-col ${className}`}>
+      <div className="flex items-start justify-between gap-3 px-5 pt-5 sm:px-6">
+        <div>
+          <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+          {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
+        </div>
+        {action}
+      </div>
+      <div className="flex-1 px-5 pb-5 pt-4 sm:px-6">{children}</div>
+    </section>
+  );
+}
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
+  const [doctorFormOpen, setDoctorFormOpen] = useState(false);
+  const [patientFormOpen, setPatientFormOpen] = useState(false);
+  const [doctorOptions, setDoctorOptions] = useState([]);
 
-  const fetchStats = async () => {
+  const load = useCallback(async () => {
+    setError('');
     try {
-      setLoading(true);
       const res = await api.get('/dashboard/stats');
-      if (res.data.success) {
-        setStats(res.data.data);
-      }
+      setStats(res.data.data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load dashboard analytics');
-    } finally {
-      setLoading(false);
+      setError(apiError(err, 'Dashboard figures could not be loaded.'));
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const openAdmit = async () => {
+    setPatientFormOpen(true);
+    if (!doctorOptions.length) {
+      const res = await api.get('/doctors?limit=100&sortBy=name&order=asc').catch(() => null);
+      if (res) setDoctorOptions(res.data.data);
     }
   };
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
+  const series = useMemo(() => lastTwelveMonths(stats?.monthlyRegistrations), [stats]);
+  const yearTotal = series.reduce((sum, m) => sum + m.admissions, 0);
+  const thisMonth = series[series.length - 1]?.admissions ?? 0;
+  const lastMonth = series[series.length - 2]?.admissions ?? 0;
+  const critical = stats?.statusDistribution?.find((s) => s.status === 'Critical')?.count || 0;
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200" />
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-32 animate-pulse rounded-2xl bg-slate-200" />
-          ))}
-        </div>
-        <div className="h-72 animate-pulse rounded-2xl bg-slate-200" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
-        <p className="font-semibold">Unable to load dashboard data</p>
-        <p className="text-xs text-rose-600 mt-1">{error}</p>
-        <button
-          onClick={fetchStats}
-          className="mt-3 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  const { totals = {}, recentPatients = [] } = stats || {};
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="space-y-8">
-      {/* Page Title & Action Bar */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">
-            Administrative Dashboard
-          </h1>
-          <p className="text-xs text-slate-500">
-            Real-time medical workforce metrics, patient caseloads, and admission trends
-          </p>
+    <>
+      <PageHeader
+        title={`${greeting()}, ${user?.name || 'there'}`}
+        description={
+          stats
+            ? `${today}. ${stats.totals.patients} patients are under the care of ${stats.totals.doctors} doctors${
+                critical ? `, and ${critical} ${critical === 1 ? 'is' : 'are'} critical` : ''
+              }.`
+            : today
+        }
+        actions={
+          <>
+            <button className="btn btn-secondary" onClick={() => setDoctorFormOpen(true)}>
+              <Stethoscope className="h-4 w-4" />
+              Add doctor
+            </button>
+            <button className="btn btn-primary" onClick={openAdmit}>
+              <UserPlus className="h-4 w-4" />
+              Admit patient
+            </button>
+          </>
+        }
+      />
+
+      {error && (
+        <div className="panel mb-6 flex items-center justify-between gap-4 border-critical/30 bg-critical-soft px-5 py-4 text-sm text-critical">
+          {error}
+          <button className="btn btn-sm btn-secondary" onClick={load}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            Try again
+          </button>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/doctors"
-            className="flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-teal-700"
-          >
-            <UserCheck className="h-4 w-4" />
-            <span>Manage Doctors</span>
-          </Link>
-          <Link
-            href="/patients"
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm transition-all hover:bg-slate-50"
-          >
-            <Users className="h-4 w-4" />
-            <span>View All Patients</span>
-          </Link>
-        </div>
-      </div>
+      )}
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          title="Total Doctors"
-          value={totals.doctors || 0}
-          icon={UserCheck}
-          color="teal"
-          subtitle="Active medical staff on record"
-        />
-        <StatCard
-          title="Total Patients"
-          value={totals.patients || 0}
-          icon={Users}
-          color="blue"
-          subtitle="Admitted across all clinical specialties"
-        />
-        <StatCard
-          title="Patients per Doctor"
-          value={totals.avgPatientsPerDoctor || 0}
-          icon={Activity}
-          color="indigo"
-          subtitle="Average caseload per physician"
-        />
-      </div>
-
-      {/* Analytics Visualizations */}
-      {stats && <AnalyticsCharts stats={stats} />}
-
-      {/* Recent Patients Activity */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Recent Patient Admissions</h2>
-            <p className="text-xs text-slate-400">Latest patients admitted to the tracking system</p>
+      {!stats && !error ? (
+        <div className="space-y-6">
+          <Skeleton className="h-[210px] rounded-panel" />
+          <div className="grid gap-6 lg:grid-cols-3">
+            <Skeleton className="h-[330px] rounded-panel lg:col-span-2" />
+            <Skeleton className="h-[330px] rounded-panel" />
           </div>
-          <Link
-            href="/patients"
-            className="flex items-center gap-1 text-xs font-semibold text-teal-600 hover:text-teal-700"
-          >
-            <span>View Full Roster</span>
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
         </div>
+      ) : stats ? (
+        <div className="space-y-6">
+          <WardStatus distribution={stats.statusDistribution} total={stats.totals.patients} />
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                <th className="pb-3 pl-2">Patient</th>
-                <th className="pb-3">Diagnosis / Condition</th>
-                <th className="pb-3">Attending Physician</th>
-                <th className="pb-3">Status</th>
-                <th className="pb-3 pr-2 text-right">Admission Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
-              {recentPatients.length > 0 ? (
-                recentPatients.map((patient) => (
-                  <tr key={patient._id} className="hover:bg-slate-50/50">
-                    <td className="py-3 pl-2 font-medium text-slate-900">
-                      {patient.name}
-                      <span className="block text-[11px] text-slate-400">
-                        {patient.age} yrs • {patient.gender}
-                      </span>
-                    </td>
-                    <td className="py-3 font-medium text-slate-800">{patient.condition}</td>
-                    <td className="py-3">
-                      <span className="font-medium text-slate-900">{patient.doctor?.name || 'Unassigned'}</span>
-                      <span className="block text-[10px] text-slate-400">{patient.doctor?.specialization}</span>
-                    </td>
-                    <td className="py-3">
-                      <span
-                        className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                          patient.status === 'Critical'
-                            ? 'bg-rose-100 text-rose-700'
-                            : patient.status === 'Recovering'
-                            ? 'bg-sky-100 text-sky-700'
-                            : patient.status === 'Under Observation'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}
-                      >
-                        {patient.status}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-2 text-right text-slate-500">
-                      {new Date(patient.admissionDate).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-line bg-line lg:grid-cols-4">
+            {[
+              { label: 'Doctors on record', value: stats.totals.doctors, href: '/doctors' },
+              { label: 'Patients on record', value: stats.totals.patients, href: '/patients' },
+              { label: 'Average patients per doctor', value: stats.totals.avgPatientsPerDoctor },
+              { label: 'Admitted this month', value: thisMonth, note: lastMonth ? `${lastMonth} last month` : null },
+            ].map((kpi) => {
+              const body = (
+                <>
+                  <dt className="text-[13px] text-muted">{kpi.label}</dt>
+                  <dd className="mt-1 flex items-baseline gap-2">
+                    <span className="num text-2xl font-semibold tracking-[-0.01em] text-ink">{kpi.value}</span>
+                    {kpi.note && <span className="num text-xs text-faint">{kpi.note}</span>}
+                  </dd>
+                </>
+              );
+              return kpi.href ? (
+                <Link key={kpi.label} href={kpi.href} className="bg-white px-5 py-4 transition-colors hover:bg-[#FAFBFB]">
+                  {body}
+                </Link>
               ) : (
-                <tr>
-                  <td colSpan={5} className="py-4 text-center text-slate-400">
-                    No recent admissions recorded.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                <div key={kpi.label} className="bg-white px-5 py-4">
+                  {body}
+                </div>
+              );
+            })}
+          </dl>
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            <Panel className="lg:col-span-2" title="Admissions over the last 12 months" description={`${yearTotal} patients admitted in this period`}>
+              <AdmissionsChart series={series} />
+            </Panel>
+            <Panel title="Patients by specialty" description="Select a specialty to see its doctors">
+              <BarList
+                unit="patients"
+                rows={stats.specialtyDistribution.map((s) => ({
+                  key: s.specialty,
+                  label: s.specialty,
+                  sub: `${s.count} doctor${s.count === 1 ? '' : 's'}`,
+                  value: s.patients,
+                  href: `/doctors?specialization=${encodeURIComponent(s.specialty)}`,
+                }))}
+              />
+            </Panel>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Panel title="Patients per doctor" description="Current caseload, highest first">
+              <BarList
+                unit="patients"
+                rows={stats.patientsPerDoctor.map((d) => ({
+                  key: d._id,
+                  label: d.doctorName,
+                  sub: d.specialization,
+                  value: d.patientCount,
+                  href: `/doctors/${d._id}`,
+                }))}
+              />
+            </Panel>
+
+            <Panel
+              title="Recent admissions"
+              description="The five most recently added patients"
+              action={
+                <Link href="/patients" className="whitespace-nowrap text-sm font-medium text-pine-700 hover:underline">
+                  View all
+                </Link>
+              }
+            >
+              <ul className="-mx-2 divide-y divide-line">
+                {stats.recentPatients.map((p) => (
+                  <li key={p._id}>
+                    <Link
+                      href={`/patients?search=${encodeURIComponent(p.name)}`}
+                      className="flex items-center gap-3 rounded-control px-2 py-3 hover:bg-canvas"
+                    >
+                      <Avatar name={p.name} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-ink">{p.name}</span>
+                        <span className="block truncate text-xs text-muted">
+                          {p.condition}
+                          {p.doctor?.name ? `, with ${p.doctor.name}` : ''}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 flex-col items-end gap-1">
+                        <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} size="sm" />
+                        <span className="num text-[11px] text-faint">{formatDate(p.admissionDate, { day: 'numeric', month: 'short' })}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          </div>
         </div>
-      </div>
-    </div>
+      ) : null}
+
+      <DoctorForm open={doctorFormOpen} doctor={null} onClose={() => setDoctorFormOpen(false)} onSaved={load} />
+      <PatientForm open={patientFormOpen} patient={null} doctors={doctorOptions} onClose={() => setPatientFormOpen(false)} onSaved={load} />
+    </>
   );
 }
