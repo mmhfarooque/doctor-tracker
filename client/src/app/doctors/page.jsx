@@ -116,7 +116,7 @@ function DoctorsView() {
         {/* Toolbar */}
         <div className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center">
           <SearchInput value={search} onChange={withReset(setSearch)} placeholder="Search doctors" className="lg:max-w-sm lg:flex-1" />
-          <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-1 sm:flex-wrap lg:justify-end">
+          <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 sm:flex sm:flex-1 sm:flex-wrap lg:justify-end">
             <select
               className="select sm:w-auto"
               value={specialization}
@@ -227,74 +227,76 @@ function DoctorsView() {
           ) : (
             <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
               {/* Desktop table */}
-              <table className="hidden w-full md:table">
-                <thead className="table-head">
-                  <tr>
-                    <th scope="col">Doctor</th>
-                    <th scope="col">Specialty</th>
-                    <th scope="col" className="hidden xl:table-cell">
-                      Hospital
-                    </th>
-                    <th scope="col" className="text-right">
-                      Patients
-                    </th>
-                    <th scope="col">Availability</th>
-                    <th scope="col">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {doctors.map((doc) => (
-                    <tr
-                      key={doc._id}
-                      className="table-row group cursor-pointer hover:bg-[#FAFBFB]"
-                      onClick={() => router.push(`/doctors/${doc._id}`)}
-                    >
-                      <td>
-                        <div className="flex items-center gap-3">
-                          <Avatar name={doc.name} />
-                          <div className="min-w-0">
-                            <Link
-                              href={`/doctors/${doc._id}`}
-                              className="block truncate font-medium text-ink group-hover:text-pine-700"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {doc.name}
-                            </Link>
-                            <span className="block truncate text-[13px] text-muted">{doc.email}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className="text-ink">{doc.specialization}</span>
-                        <span className="num block text-[13px] text-muted">{doc.experienceYears} yrs experience</span>
-                      </td>
-                      <td className="hidden max-w-[220px] truncate text-ink-soft xl:table-cell">{doc.hospital}</td>
-                      <td className="num text-right font-medium text-ink">{doc.patientCount}</td>
-                      <td>
-                        <StatusBadge status={findStatus(DOCTOR_STATUSES, doc.status)} />
-                      </td>
-                      <td className="w-12 text-right" onClick={(e) => e.stopPropagation()}>
-                        <Menu
-                          items={rowMenu(doc)}
-                          trigger={({ toggle, open }) => (
-                            <button
-                              className="icon-btn"
-                              onClick={toggle}
-                              aria-haspopup="menu"
-                              aria-expanded={open}
-                              aria-label={`Actions for ${doc.name}`}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-                          )}
-                        />
-                      </td>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full">
+                  <thead className="table-head">
+                    <tr>
+                      <th scope="col">Doctor</th>
+                      <th scope="col">Specialty</th>
+                      <th scope="col" className="hidden xl:table-cell">
+                        Hospital
+                      </th>
+                      <th scope="col" className="text-right">
+                        Patients
+                      </th>
+                      <th scope="col">Availability</th>
+                      <th scope="col">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {doctors.map((doc) => (
+                      <tr
+                        key={doc._id}
+                        className="table-row group cursor-pointer hover:bg-[#FAFBFB]"
+                        onClick={() => router.push(`/doctors/${doc._id}`)}
+                      >
+                        <td>
+                          <div className="flex items-center gap-3">
+                            <Avatar name={doc.name} />
+                            <div className="min-w-0">
+                              <Link
+                                href={`/doctors/${doc._id}`}
+                                className="block truncate font-medium text-ink group-hover:text-pine-700"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {doc.name}
+                              </Link>
+                              <span className="block truncate text-[13px] text-muted">{doc.email}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="text-ink">{doc.specialization}</span>
+                          <span className="num block text-[13px] text-muted">{doc.experienceYears} yrs experience</span>
+                        </td>
+                        <td className="hidden max-w-[220px] truncate text-ink-soft xl:table-cell">{doc.hospital}</td>
+                        <td className="num text-right font-medium text-ink">{doc.patientCount}</td>
+                        <td>
+                          <StatusBadge status={findStatus(DOCTOR_STATUSES, doc.status)} />
+                        </td>
+                        <td className="w-12 text-right" onClick={(e) => e.stopPropagation()}>
+                          <Menu
+                            items={rowMenu(doc)}
+                            trigger={({ toggle, open }) => (
+                              <button
+                                className="icon-btn"
+                                onClick={toggle}
+                                aria-haspopup="menu"
+                                aria-expanded={open}
+                                aria-label={`Actions for ${doc.name}`}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </button>
+                            )}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Mobile cards */}
               <ul className="divide-y divide-line md:hidden">

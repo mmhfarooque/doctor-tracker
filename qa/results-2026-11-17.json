@@ -1,0 +1,368 @@
+[
+  {
+    "area": "Auth",
+    "name": "Protected page without login redirects to /login",
+    "pass": true,
+    "detail": "http://localhost:3000/login"
+  },
+  {
+    "area": "Auth",
+    "name": "Wrong password shows a clear error and stays on login",
+    "pass": true,
+    "detail": "Invalid email or password"
+  },
+  {
+    "area": "Auth",
+    "name": "Injection text in email field fails validation",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Auth",
+    "name": "Password field length capped",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Auth",
+    "name": "Show-password toggle reveals the text",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Auth",
+    "name": "Correct credentials reach the dashboard",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "320px — no page scrolls sideways",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "375px — no page scrolls sideways",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "414px — no page scrolls sideways",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "768px — no page scrolls sideways",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "1024px — no page scrolls sideways",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "1280px — no page scrolls sideways",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "1920px — no page scrolls sideways",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "Mobile menu: hidden, opens, closes after navigating",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "No tiny tap targets (<24px) on mobile Patients page",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Responsive",
+    "name": "Sidebar permanently visible at 1024px",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Doctor form",
+    "name": "Empty form cannot be submitted",
+    "pass": true,
+    "detail": "Please fill out this field."
+  },
+  {
+    "area": "Doctor form",
+    "name": "Invalid email blocked in the browser",
+    "pass": true,
+    "detail": "Please include an '@' in the email address. 'not-an-email' is missing an '@'."
+  },
+  {
+    "area": "Doctor form",
+    "name": "Email without a domain ending rejected by server, message shown",
+    "pass": true,
+    "detail": "Please provide a valid email address"
+  },
+  {
+    "area": "Doctor form",
+    "name": "Invalid phone rejected with message",
+    "pass": true,
+    "detail": "Please provide a valid phone number"
+  },
+  {
+    "area": "Doctor form",
+    "name": "Experience of 500 years blocked",
+    "pass": true,
+    "detail": "Value must be less than or equal to 70."
+  },
+  {
+    "area": "Doctor form",
+    "name": "Negative experience blocked",
+    "pass": true,
+    "detail": "Value must be greater than or equal to 0."
+  },
+  {
+    "area": "Doctor form",
+    "name": "Duplicate doctor email rejected with message",
+    "pass": true,
+    "detail": "A doctor with this email address already exists"
+  },
+  {
+    "area": "Doctor form",
+    "name": "Name field length capped",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Doctor form",
+    "name": "Valid doctor (unicode + HTML in fields) saves and panel closes",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Doctor form",
+    "name": "Success message shown",
+    "pass": true,
+    "detail": "Dr. José Ñúñez 李 added"
+  },
+  {
+    "area": "Security",
+    "name": "HTML tags stripped before saving (stored XSS)",
+    "pass": true,
+    "detail": "\"Dr. José Ñúñez 李\""
+  },
+  {
+    "area": "Security",
+    "name": "Profile renders that data without running any script",
+    "pass": true,
+    "detail": "alerts=0"
+  },
+  {
+    "area": "Patient form",
+    "name": "Empty form cannot be submitted",
+    "pass": true,
+    "detail": "Please fill out this field."
+  },
+  {
+    "area": "Patient form",
+    "name": "Negative age blocked",
+    "pass": true,
+    "detail": "Value must be greater than or equal to 0."
+  },
+  {
+    "area": "Patient form",
+    "name": "Age above 130 blocked",
+    "pass": true,
+    "detail": "Value must be less than or equal to 130."
+  },
+  {
+    "area": "Patient form",
+    "name": "Malformed email blocked",
+    "pass": true,
+    "detail": "A part following '@' should not contain the symbol '@'."
+  },
+  {
+    "area": "Patient form",
+    "name": "Server rejects short phone / bad email with a message",
+    "pass": true,
+    "detail": "Please provide a valid phone number"
+  },
+  {
+    "area": "Patient form",
+    "name": "Valid patient (injection text in notes) saves",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Search abuse",
+    "name": "Search \".*\" handled safely",
+    "pass": true,
+    "detail": "empty state"
+  },
+  {
+    "area": "Search abuse",
+    "name": "Search \"{\"$ne\":null}\" handled safely",
+    "pass": true,
+    "detail": "empty state"
+  },
+  {
+    "area": "Search abuse",
+    "name": "Search \"'; DROP TABLE patients;-\" handled safely",
+    "pass": true,
+    "detail": "empty state"
+  },
+  {
+    "area": "Search abuse",
+    "name": "Search \"<script>alert(1)</script\" handled safely",
+    "pass": true,
+    "detail": "empty state"
+  },
+  {
+    "area": "Search abuse",
+    "name": "Search \"(a+)+$\" handled safely",
+    "pass": true,
+    "detail": "empty state"
+  },
+  {
+    "area": "Search abuse",
+    "name": "Search \"ü李ü李ü李ü李ü李ü李ü李ü李ü李ü李ü李ü李\" handled safely",
+    "pass": true,
+    "detail": "empty state"
+  },
+  {
+    "area": "Search abuse",
+    "name": "Search box capped at 100 characters",
+    "pass": true,
+    "detail": "100 chars"
+  },
+  {
+    "area": "Search abuse",
+    "name": "\".*\" is matched literally, not as a wildcard",
+    "pass": true,
+    "detail": "total=0"
+  },
+  {
+    "area": "URL tampering",
+    "name": "/doctors/not-a-real-i… shows \"Doctor not found\"",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "URL tampering",
+    "name": "/doctors/000000000000… shows \"Doctor not found\"",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "URL tampering",
+    "name": "Script injected via ?status= does not run",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "URL tampering",
+    "name": "Operator object in ?specialization= leaks nothing",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "URL tampering",
+    "name": "Unknown page returns 404",
+    "pass": true,
+    "detail": "status 404"
+  },
+  {
+    "area": "Keyboard",
+    "name": "Escape closes the edit panel",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Keyboard",
+    "name": "Ctrl+K opens quick search, Escape closes it",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Keyboard",
+    "name": "Keyboard focus is visible",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Delete",
+    "name": "Cancel on the confirmation keeps the patient",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Delete",
+    "name": "Confirmed delete removes the patient",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Delete",
+    "name": "Deleting a doctor who still has patients is refused with an explanation",
+    "pass": true,
+    "detail": "Delete Dr. Arthur Pendelton?Dr. Arthur Pendelton still has 2 patients. Remove or reassign them first; the dele"
+  },
+  {
+    "area": "Errors",
+    "name": "API unreachable → clear error + \"Try again\" (Doctors)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Errors",
+    "name": "API unreachable → clear error + \"Try again\" (Patients)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Errors",
+    "name": "API unreachable → clear error + \"Try again\" (Dashboard)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Errors",
+    "name": "\"Try again\" recovers once the API is back",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Auth",
+    "name": "Forged token → logged out to /login",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Auth",
+    "name": "Forged token wiped from storage",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "area": "Cleanup",
+    "name": "QA records removed, demo data intact (8 doctors / 23 patients)",
+    "pass": true,
+    "detail": "{\"doctors\":8,\"patients\":23,\"avgPatientsPerDoctor\":2.9}"
+  },
+  {
+    "area": "Runtime",
+    "name": "No JavaScript errors on any page",
+    "pass": true,
+    "detail": ""
+  }
+]

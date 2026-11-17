@@ -21,6 +21,7 @@ const shutdown = (signal) => {
     await mongoose.connection.close();
     process.exit(0);
   });
+  server.closeIdleConnections(); // keep-alive sockets would otherwise hold close() open
   setTimeout(() => process.exit(1), 10_000).unref(); // hard stop if something hangs
 };
 process.on('SIGTERM', () => shutdown('SIGTERM'));

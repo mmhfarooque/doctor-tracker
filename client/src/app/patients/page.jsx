@@ -161,9 +161,9 @@ function PatientsView() {
         {/* Toolbar */}
         <div className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center">
           <SearchInput value={search} onChange={withReset(setSearch)} placeholder="Search patients" className="lg:max-w-sm lg:flex-1" />
-          <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-1 sm:flex-wrap lg:justify-end">
+          <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 sm:flex sm:flex-1 sm:flex-wrap lg:justify-end">
             <select
-              className="select col-span-2 sm:w-auto"
+              className="select min-[400px]:col-span-2 sm:w-auto"
               value={doctor}
               onChange={(e) => withReset(setDoctor)(e.target.value)}
               aria-label="Attending doctor"
@@ -265,72 +265,77 @@ function PatientsView() {
             />
           ) : (
             <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
-              <table className="hidden w-full md:table">
-                <thead className="table-head">
-                  <tr>
-                    <th scope="col">Patient</th>
-                    <th scope="col">Condition</th>
-                    <th scope="col" className="hidden lg:table-cell">
-                      Attending doctor
-                    </th>
-                    <th scope="col">Status</th>
-                    <th scope="col" className="hidden xl:table-cell">
-                      Admitted
-                    </th>
-                    <th scope="col">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {patients.map((p) => (
-                    <tr key={p._id} className="table-row group cursor-pointer hover:bg-[#FAFBFB]" onClick={() => setEditing(p)}>
-                      <td>
-                        <div className="flex items-center gap-3">
-                          <Avatar name={p.name} />
-                          <div className="min-w-0">
-                            <span className="block truncate font-medium text-ink group-hover:text-pine-700">{p.name}</span>
-                            <span className="num block text-[13px] text-muted">
-                              {p.age} yrs, {p.gender}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="max-w-[220px] truncate text-ink">{p.condition}</td>
-                      <td className="hidden lg:table-cell" onClick={(e) => e.stopPropagation()}>
-                        {p.doctor ? (
-                          <Link href={`/doctors/${p.doctor._id}`} className="hover:text-pine-700 hover:underline">
-                            {p.doctor.name}
-                          </Link>
-                        ) : (
-                          <span className="text-faint">Unassigned</span>
-                        )}
-                        {p.doctor?.specialization && <span className="block text-[13px] text-muted">{p.doctor.specialization}</span>}
-                      </td>
-                      <td>
-                        <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} />
-                      </td>
-                      <td className="num hidden whitespace-nowrap text-ink-soft xl:table-cell">{formatDate(p.admissionDate)}</td>
-                      <td className="w-12 text-right" onClick={(e) => e.stopPropagation()}>
-                        <Menu
-                          items={rowMenu(p)}
-                          trigger={({ toggle, open }) => (
-                            <button
-                              className="icon-btn"
-                              onClick={toggle}
-                              aria-haspopup="menu"
-                              aria-expanded={open}
-                              aria-label={`Actions for ${p.name}`}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-                          )}
-                        />
-                      </td>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full">
+                  <thead className="table-head">
+                    <tr>
+                      <th scope="col">Patient</th>
+                      <th scope="col">Condition</th>
+                      <th scope="col" className="hidden xl:table-cell">
+                        Attending doctor
+                      </th>
+                      <th scope="col">Status</th>
+                      <th scope="col" className="hidden xl:table-cell">
+                        Admitted
+                      </th>
+                      <th scope="col">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {patients.map((p) => (
+                      <tr key={p._id} className="table-row group cursor-pointer hover:bg-[#FAFBFB]" onClick={() => setEditing(p)}>
+                        <td>
+                          <div className="flex items-center gap-3">
+                            <Avatar name={p.name} />
+                            <div className="min-w-0">
+                              <span className="block truncate font-medium text-ink group-hover:text-pine-700">{p.name}</span>
+                              <span className="num block text-[13px] text-muted">
+                                {p.age} yrs, {p.gender}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="max-w-[240px] text-ink">
+                          <span className="block truncate">{p.condition}</span>
+                          {p.doctor?.name && <span className="block truncate text-[13px] text-muted xl:hidden">{p.doctor.name}</span>}
+                        </td>
+                        <td className="hidden xl:table-cell" onClick={(e) => e.stopPropagation()}>
+                          {p.doctor ? (
+                            <Link href={`/doctors/${p.doctor._id}`} className="hover:text-pine-700 hover:underline">
+                              {p.doctor.name}
+                            </Link>
+                          ) : (
+                            <span className="text-faint">Unassigned</span>
+                          )}
+                          {p.doctor?.specialization && <span className="block text-[13px] text-muted">{p.doctor.specialization}</span>}
+                        </td>
+                        <td>
+                          <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} />
+                        </td>
+                        <td className="num hidden whitespace-nowrap text-ink-soft xl:table-cell">{formatDate(p.admissionDate)}</td>
+                        <td className="w-12 text-right" onClick={(e) => e.stopPropagation()}>
+                          <Menu
+                            items={rowMenu(p)}
+                            trigger={({ toggle, open }) => (
+                              <button
+                                className="icon-btn"
+                                onClick={toggle}
+                                aria-haspopup="menu"
+                                aria-expanded={open}
+                                aria-label={`Actions for ${p.name}`}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </button>
+                            )}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
               <ul className="divide-y divide-line md:hidden">
                 {patients.map((p) => (

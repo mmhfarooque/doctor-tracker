@@ -264,60 +264,62 @@ export default function DoctorProfilePage() {
             />
           ) : (
             <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
-              <table className="hidden w-full md:table">
-                <thead className="table-head">
-                  <tr>
-                    <th scope="col">Patient</th>
-                    <th scope="col">Condition</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Admitted</th>
-                    <th scope="col">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {patients.map((p) => (
-                    <tr key={p._id} className="table-row group cursor-pointer hover:bg-[#FAFBFB]" onClick={() => setPatientForm(p)}>
-                      <td>
-                        <div className="flex items-center gap-3">
-                          <Avatar name={p.name} size="sm" />
-                          <div>
-                            <span className="block font-medium text-ink group-hover:text-pine-700">{p.name}</span>
-                            <span className="num block text-[13px] text-muted">
-                              {p.age} yrs, {p.gender}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="text-ink">{p.condition}</td>
-                      <td>
-                        <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} />
-                      </td>
-                      <td className="num whitespace-nowrap text-ink-soft">{formatDate(p.admissionDate)}</td>
-                      <td className="w-12 text-right" onClick={(e) => e.stopPropagation()}>
-                        <Menu
-                          items={[
-                            { key: 'edit', label: 'Edit patient', icon: Pencil, onClick: () => setPatientForm(p) },
-                            { key: 'rm', label: 'Remove from list', icon: Trash2, danger: true, onClick: () => setToRemove(p) },
-                          ]}
-                          trigger={({ toggle, open }) => (
-                            <button
-                              className="icon-btn"
-                              onClick={toggle}
-                              aria-haspopup="menu"
-                              aria-expanded={open}
-                              aria-label={`Actions for ${p.name}`}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-                          )}
-                        />
-                      </td>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full">
+                  <thead className="table-head">
+                    <tr>
+                      <th scope="col">Patient</th>
+                      <th scope="col">Condition</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Admitted</th>
+                      <th scope="col">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {patients.map((p) => (
+                      <tr key={p._id} className="table-row group cursor-pointer hover:bg-[#FAFBFB]" onClick={() => setPatientForm(p)}>
+                        <td>
+                          <div className="flex items-center gap-3">
+                            <Avatar name={p.name} size="sm" />
+                            <div>
+                              <span className="block font-medium text-ink group-hover:text-pine-700">{p.name}</span>
+                              <span className="num block text-[13px] text-muted">
+                                {p.age} yrs, {p.gender}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="text-ink">{p.condition}</td>
+                        <td>
+                          <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} />
+                        </td>
+                        <td className="num whitespace-nowrap text-ink-soft">{formatDate(p.admissionDate)}</td>
+                        <td className="w-12 text-right" onClick={(e) => e.stopPropagation()}>
+                          <Menu
+                            items={[
+                              { key: 'edit', label: 'Edit patient', icon: Pencil, onClick: () => setPatientForm(p) },
+                              { key: 'rm', label: 'Remove from list', icon: Trash2, danger: true, onClick: () => setToRemove(p) },
+                            ]}
+                            trigger={({ toggle, open }) => (
+                              <button
+                                className="icon-btn"
+                                onClick={toggle}
+                                aria-haspopup="menu"
+                                aria-expanded={open}
+                                aria-label={`Actions for ${p.name}`}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </button>
+                            )}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
               <ul className="divide-y divide-line md:hidden">
                 {patients.map((p) => (
