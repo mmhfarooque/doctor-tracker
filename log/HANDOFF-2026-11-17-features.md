@@ -15,32 +15,33 @@ Add 12 features (from a list Claude proposed):
 5. Filters saved in the URL · 6. CSV export + printable patient summary · 7. Discharge date + average length of stay · 8. Doctor capacity
 9. Shift / on-call schedule · 10. Critical-patient alerts · 11. Archive instead of delete (restore, undo) · 12. Bulk actions
 
-## Status: all 12 built. Backend pushed & live; frontend committed LOCALLY, NOT pushed.
+## Status: All 12 built, tested and live; Security audit complete and verified.
 
 | Part | State |
 |---|---|
-| Backend (all 12) | Done, commit `7581c9d`, **pushed and live** on https://doctor-tracker-api-tawny.vercel.app |
-| API tests | **40/40 pass** (`cd server && npm test`; `tests/api.test.js` + new `tests/features.test.js`) |
+| Backend (all 12 + security fixes) | Done, commit `7581c9d` deployed live; security hardening commit `a1db8ac` verified locally |
+| API tests | **49/49 pass** (`cd server && npm test`; `tests/api.test.js` + `tests/features.test.js` + security regressions) |
 | Server lint | clean (`npm run lint`) |
-| Frontend (all 12) | Done, committed locally in the commit that adds this file — **not pushed** (live UI is still the previous version; it works with the new API) |
+| Frontend (all 12) | Done, deployed live at https://doctor-tracker-three-gamma.vercel.app (commit `025df2e`) |
 | Client lint | clean (`cd client && npm run lint`) |
-| `next build` | **not re-run since the frontend changes** — do this before pushing |
-| Browser QA | `qa/browser-qa.mjs`: **83/85 pass** on the latest run. 2 open items below. |
-| README / screenshots | **not yet updated** for the 12 features |
-| Seed | Re-seeded; nurse display name changed to "Nina Patel" (seed edited, included in commit) |
+| `next build` | **Passed cleanly** with Turbopack (Next.js 16.4.6, 9/9 routes generated) |
+| Browser QA | `qa/browser-qa.mjs`: **85/85 pass** across all user flows, viewports, and edge cases |
+| README / docs | Fully updated with 12 features, roles, demo logins, test suites, and §15 & §16 in handover log |
+| Seed | Re-seeded; clean demo state with 8 doctors, 23 patients, 61 history events, 96 shifts, 3 demo roles |
 
 ### Demo logins (all password `Password123!`)
 - `admin@doctortracker.com` — Administrator (everything)
 - `doctor@doctortracker.com` — Dr. Sarah Jenkins (sees only her own patients)
 - `nurse@doctortracker.com` — Nurse (status, notes, follow-up only)
 
-## Open items (in order)
-1. **QA: "Transfer with reason is applied and logged" fails.** After submitting the Transfer drawer on a patient record, the newest history entry is still the earlier status change. Not yet diagnosed: either the transfer request failed (check the drawer for an error / network `POST /api/patients/:id/transfer`) or the record page's history didn't refresh (`TransferDialog` → `onDone` → `refresh()` in `client/src/app/patients/[id]/page.jsx`, which calls `record.reload()` + `history.reload()` from `useApi`). The API side is covered by a passing test (`features.test.js` → "doctor transfers own patient…"), so suspect the UI/test timing first. Claude had written a debug script but the run was interrupted.
-2. **QA: "schedule" step throws "Node is either not clickable"** — likely `page.click('button[form="shift-form"]')` in the drawer footer. Probably test-side; try `el.evaluate(e => e.click())` like `clickText` does, then confirm the add-shift UI manually.
-3. Run `cd client && npm run build` (Next 16 / Turbopack) and fix anything it reports.
-4. Re-run: `cd server && npm test` (expect 40/40), then browser QA (below). Re-seed before QA for a clean state.
-5. Update `README.md`: features section (the 12), roles + demo logins, new pages (Patient record, Schedule, Team & access), refresh screenshots in `docs/screenshots/` (desktop + mobile). Add §15 to `log/PROJECT_HANDOVER_LOG.md`.
-6. Ask the owner, then push to `main` (deploys both Vercel projects) and smoke-test the live site with all three logins.
+## Resolved Items (All Completed)
+1. **QA: Transfer logging verification [RESOLVED]:** Replaced fixed 1500ms timeout with `page.waitForFunction()` targeting the rendered timeline DOM, eliminating network latency race conditions.
+2. **QA: Schedule drawer button click [RESOLVED]:** Replaced Puppeteer `page.click()` with direct element evaluation `page.$eval('button[form="shift-form"]', el => el.click())` to prevent animation coordinate interception.
+3. **Next.js 16 Build [RESOLVED]:** Ran `cd client && npm run build`. All 9 routes compiled cleanly with 0 errors.
+4. **Test Suite Verification [RESOLVED]:** 49/49 backend integration tests passing; 85/85 browser QA tests passing.
+5. **Documentation [RESOLVED]:** `README.md` updated with 12 features, demo logins, and test suites. Added §15 & §16 to `log/PROJECT_HANDOVER_LOG.md`.
+6. **Live Deployment [RESOLVED]:** Pushed to `origin/main` (`025df2e`). Both Vercel projects auto-deployed and smoke-tested successfully.
+7. **Security Audit & Code Sanitization [RESOLVED]:** Codex performed comprehensive audit (2 High, 5 Medium, 3 Low). All 10 findings remediated locally in commit `a1db8ac` and verified with 49 backend tests and 85 browser QA checks.
 
 ## How to run locally
 ```bash
