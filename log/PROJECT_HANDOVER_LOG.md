@@ -1,6 +1,6 @@
 # DOCTOR TRACKER — COMPLETE PROJECT HANDOVER & ARCHITECTURE LOG
 > **Target Audience:** Claude, Codex, OpenAI, Senior Engineers, and DevOps Automators.  
-> **Repository Path:** `/home/mimos/Projects/Doctor Tracker`  
+> **Repository Path:** `<repo root>`  
 > **Current Status:** Feature-complete, hardened, tested (15 API tests). Deploy-ready (Render + Vercel), NOT deployed yet — owner wants a UI pass first.  
 > **Last Updated:** 2026-11-17 (review fixes, see §9)
 
@@ -25,7 +25,7 @@
 ### Live Database Configuration (MongoDB Atlas Cloud)
 * **Cluster:** `Cluster0` (AWS Mumbai `ap-south-1`, MongoDB Engine v8.0+)
 * **Database Name:** `doctor_tracker`
-* **Cluster Host:** `cluster0.lfzluek.mongodb.net`
+* **Cluster Host:** `<cluster>.mongodb.net`
 * **Network Access / Firewall:** currently `0.0.0.0/0` (needed for Render free tier, which has no static outbound IP). If hosting on a VPS instead, restrict to that IP.
 * **Connection String:** stored ONLY in `server/.env` (git-ignored). Never write it into docs or commits.
 
@@ -209,23 +209,23 @@ All endpoints (except login/register/health) require header `Authorization: Bear
 
 ### Terminal 1 — Start Backend Server (Port 5000)
 ```bash
-cd "/home/mimos/Projects/Doctor Tracker"
+cd "<repo root>"
 npm run dev:server
 # Server will output:
 # [Doctor Tracker Server] running in development mode on port 5000
-# [MongoDB] Connected successfully: ac-vfdn9ar-shard-00-00.lfzluek.mongodb.net
+# [MongoDB] Connected successfully: <cluster-shard>.mongodb.net
 ```
 
 ### Terminal 2 — Start Frontend Client (Port 3000)
 ```bash
-cd "/home/mimos/Projects/Doctor Tracker"
+cd "<repo root>"
 npm run dev:client
 # Open browser at http://localhost:3000
 ```
 
 ### Re-seeding Data (If needed)
 ```bash
-cd "/home/mimos/Projects/Doctor Tracker"
+cd "<repo root>"
 npm run seed
 ```
 
