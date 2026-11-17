@@ -137,6 +137,12 @@ const seedDB = async () => {
     }
 
     console.log('[Seeder] Connecting to database...');
+    if (process.env.NODE_ENV === 'production' && !process.argv.includes('--force')) {
+      console.error('[Seeder] Refusing to run: NODE_ENV=production and this script DELETES all users, doctors and patients.');
+      console.error('[Seeder] Re-run with `npm run seed -- --force` only if you really want to reset a production database.');
+      process.exit(1);
+    }
+
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('[Seeder] Connected successfully.');
 

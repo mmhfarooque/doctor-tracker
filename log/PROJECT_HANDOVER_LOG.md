@@ -396,4 +396,22 @@ Owner asked for a complete, user-friendly admin UI (old one had the user badge t
 
 ---
 
+## 12. Second Audit Pass — 2026-11-17 (late)
+
+Different angles from §11: failure paths, operations, live hostile-request probing, production header check.
+
+* **Live probing** (malformed JSON, 2 MB body, `__proto__`, `$ne`/`$regex` in query, array params, limit=100000, sort injection, alg:none JWT, ReDoS pattern, stored-XSS name, foreign CORS origin): all neutralised except two error-path bugs, now fixed:
+  * Oversized body returned 500 → now **413**; error handler honours Express/body-parser `err.status`.
+  * Duplicate-key handler assumed `err.keyValue` exists → guarded; duplicates now **409**. CastError → 400.
+* **Operations:**
+  * `npm run seed` refuses when `NODE_ENV=production` unless `-- --force` (it deletes all data).
+  * `/health` returns **503** with `database: disconnected` when MongoDB is down (Render health check restarts it).
+  * Graceful shutdown moved to `server.js`: stop HTTP server → close DB pool → exit (10 s hard stop). `unhandledRejection` / `uncaughtException` are logged and trigger a clean restart.
+  * Production logs omit stack traces.
+* **Verified in a real production build:** CSP without `'unsafe-eval'`, `connect-src` limited to the API origin, HSTS, COOP, frame DENY, Referrer/Permissions-Policy, no `X-Powered-By`.
+* Secrets scan of full git history: clean. No tracked env/credential files. No `dangerouslySetInnerHTML`/`eval`/`innerHTML`. No stray `console.*` in client. No unused modules.
+* Tests **22/22** (added: 413, production CORS allow/deny, health). Lint clean both apps. `npm audit` 0 / 0.
+
+---
+
 *This document serves as the single source of truth for the Doctor Tracker full-stack codebase. Any subsequent AI assistant or software engineer can read this file and have complete technical context.*

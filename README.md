@@ -277,4 +277,8 @@ cd server && npm test
 * JWT (HS256 only, 12 h expiry), bcrypt password hashing, timing-safe login, rate limiting on auth and API.
 * Input validation on every write (type checks, enums, length caps, ObjectId checks), NoSQL operator / prototype-pollution stripping, HPP, Helmet, strict CORS in production.
 * No-store cache headers on all API responses (patient data never cached), CSP and frame protection on the client.
+* Request logs never include query strings (search terms can contain patient names).
+* `/health` reports database connectivity (503 when the database is unreachable); graceful shutdown on SIGTERM.
+* The demo seeder refuses to run against a production environment unless forced.
+* CI runs lint, tests against MongoDB, the production build and `npm audit` on every push; Dependabot proposes updates weekly.
 * Secrets live only in git-ignored `.env` files.

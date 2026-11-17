@@ -86,7 +86,7 @@ test('creates a doctor and rejects a duplicate email', async () => {
   assert.equal(res.status, 201);
   doctorId = res.body.data._id;
   const dup = await api('POST', '/doctors', doc);
-  assert.equal(dup.status, 400);
+  assert.ok([400, 409].includes(dup.status));
 });
 
 test('rejects non-string doctor fields with 400 instead of crashing', async () => {
@@ -168,6 +168,31 @@ test('unknown routes return 404 without echoing the URL', async () => {
   const res = await api('GET', '/nope?<script>');
   assert.equal(res.status, 404);
   assert.equal(res.body.message, 'API route not found');
+});
+
+test('oversized request body returns 413, not 500', async () => {
+  const res = await api('POST', '/patients', { notes: 'x'.repeat(2_000_000) });
+  assert.equal(res.status, 413);
+});
+
+test('production CORS rejects unknown origins and allows the configured one', async () => {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  try {
+    const evil = await fetch(`${base}/api/doctors`, { headers: { Origin: 'https://evil.example', Authorization: `Bearer ${token}` } });
+    assert.equal(evil.status, 403);
+    assert.equal(evil.headers.get('access-control-allow-origin'), null);
+    const ok = await fetch(`${base}/api/doctors`, { headers: { Origin: 'http://localhost:3000', Authorization: `Bearer ${token}` } });
+    assert.equal(ok.headers.get('access-control-allow-origin'), 'http://localhost:3000');
+  } finally {
+    process.env.NODE_ENV = previous;
+  }
+});
+
+test('health reports the database connection', async () => {
+  const res = await fetch(`${base}/health`);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).database, 'connected');
 });
 
 test('invalid ObjectId returns 400', async () => {
