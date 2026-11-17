@@ -414,4 +414,17 @@ Different angles from §11: failure paths, operations, live hostile-request prob
 
 ---
 
+## 13. Browser QA — 2026-11-17 (late)
+
+`qa/browser-qa.mjs` (Puppeteer, headless Chrome) — **61/61 pass** (`qa/results-2026-11-17.json`). Covers auth, responsive 320–1920 px, mobile menu, tap targets, wrong data in every form, stored XSS / injection via UI, search abuse, URL tampering, keyboard, delete confirmation + doctor-delete guard, API-down error states + recovery, forged token. QA data self-cleans.
+
+Bugs it found and that were fixed:
+* **Patients table overflowed at 1024 px** → doctor column moves under condition below 1280 px; every desktop table wrapped in `overflow-x-auto`.
+* **Filter controls cramped at 320 px** → stack one per row under 400 px.
+* **404 was the unstyled Next default** → `app/not-found.jsx` with links back.
+* **Rate limit was per IP for the whole API** → staff behind one hospital IP could lock each other out. Now authenticated requests are limited per user (1500 / 15 min), anonymous per IP (300 / 15 min); login stays 25 / 15 min per IP.
+* **API process found dead** during QA (it had been started by an earlier session). Restart path verified (watch restart recovers in ~2 s); shutdown now also calls `closeIdleConnections()` so keep-alive sockets can't stall it.
+
+---
+
 *This document serves as the single source of truth for the Doctor Tracker full-stack codebase. Any subsequent AI assistant or software engineer can read this file and have complete technical context.*

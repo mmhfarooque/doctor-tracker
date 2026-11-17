@@ -2,7 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import hpp from 'hpp';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -53,14 +54,30 @@ app.use(
 );
 
 // 3. Rate Limiting to prevent DoS and Brute Force
+// Signed-in admins are limited per user, not per IP: a hospital's staff usually share one office IP,
+// and an IP-wide limit would let one busy colleague lock everyone out. Anonymous traffic is limited per IP.
+const userOrIpKey = (req) => {
+  const header = req.headers.authorization || '';
+  if (header.startsWith('Bearer ')) {
+    try {
+      const { id } = jwt.verify(header.slice(7), process.env.JWT_SECRET, { algorithms: ['HS256'] });
+      if (id) return `user:${id}`;
+    } catch {
+      // invalid or expired token: fall through to the IP bucket
+    }
+  }
+  return `ip:${ipKeyGenerator(req.ip)}`;
+};
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // Max 500 requests per 15 minutes per IP
+  limit: (req) => (userOrIpKey(req).startsWith('user:') ? 1500 : 300),
+  keyGenerator: userOrIpKey,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    message: 'Too many requests from this IP address, please try again in 15 minutes.',
+    message: 'Too many requests. Please wait a few minutes and try again.',
   },
 });
 
