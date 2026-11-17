@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import connectDB from './config/db.js';
+import { validateEnv } from './config/envCheck.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { mongoSanitizeMiddleware } from './middleware/sanitizeMiddleware.js';
 
@@ -16,8 +17,17 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 
 dotenv.config();
 
+// Validate critical environment variables
+validateEnv();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Trust reverse proxy for accurate IP identification in rate limiters (VPS / Nginx)
+app.set('trust proxy', 1);
+
+// Obfuscate server technology fingerprint
+app.disable('x-powered-by');
 
 // Connect to MongoDB
 connectDB();

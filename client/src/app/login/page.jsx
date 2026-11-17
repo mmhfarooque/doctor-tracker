@@ -83,6 +83,7 @@ export default function LoginPage() {
               <input
                 type="email"
                 required
+                maxLength={100}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@doctortracker.com"
@@ -98,6 +99,7 @@ export default function LoginPage() {
               <input
                 type="password"
                 required
+                maxLength={128}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
