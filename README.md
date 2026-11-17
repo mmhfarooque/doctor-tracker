@@ -256,16 +256,18 @@ cd server && npm test
 
 ## 8. Deployment
 
-**Backend → Render (free tier)**
-1. New → Blueprint → select this repo (uses [`render.yaml`](render.yaml); root `server/`, health check `/health`).
-2. Set environment variables: `MONGODB_URI`, `JWT_SECRET` (64 random chars), `CLIENT_URL` (the Vercel URL, comma-separate several).
-3. In MongoDB Atlas → Network Access, allow `0.0.0.0/0` (Render free has no static IP).
-4. Note: the free instance sleeps after 15 minutes idle; the first request then takes about 30–50 seconds.
+Both apps run on **Vercel** as two projects from this repository.
 
-**Frontend → Vercel**
-1. New Project → import this repo → Root Directory `client` (Next.js is auto-detected).
-2. Environment variables: `NEXT_PUBLIC_API_URL=https://<render-service>.onrender.com/api`, optionally `NEXT_PUBLIC_SHOW_DEMO_LOGIN=true` so reviewers see the demo credentials.
-3. Deploy, then put the Vercel URL into `CLIENT_URL` on Render.
+**API → Vercel project with Root Directory `server`**
+* `server/api/index.js` wraps the Express app as a serverless function (MongoDB connection reused across warm invocations); `server/vercel.json` routes every path to it.
+* Environment variables: `MONGODB_URI`, `JWT_SECRET` (64 random characters), `CLIENT_URL` (the frontend URL; comma-separate several).
+* MongoDB Atlas → Network Access must allow `0.0.0.0/0` (Vercel functions have no fixed IP).
+
+**Frontend → Vercel project with Root Directory `client`** (Next.js is detected automatically)
+* Environment variables: `NEXT_PUBLIC_API_URL=https://<api-project>.vercel.app/api`, `NEXT_PUBLIC_SHOW_DEMO_LOGIN=true`.
+* Optional `NEXT_PUBLIC_BASE_PATH` (e.g. `/doctor-tracker`) to serve the app under a sub-path of another domain.
+
+`render.yaml` is kept as an alternative: the API also runs unchanged on Render (`npm start`).
 
 **Demo login:** `admin@doctortracker.com` / `Password123!` (created by `npm run seed`).
 

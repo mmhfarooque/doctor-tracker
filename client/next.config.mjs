@@ -25,6 +25,8 @@ const csp = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Served under a sub-path in production (e.g. dev.mfaruk.com/doctors); empty locally
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || '',
   poweredByHeader: false,
   devIndicators: false, // dev-only badge overlapped the sidebar account button // Disables 'X-Powered-By: Next.js' header for fingerprint obfuscation
   async headers() {
