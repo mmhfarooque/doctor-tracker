@@ -1,5 +1,8 @@
 # Doctor Tracker — Healthcare Administrative Web Portal
 
+**Live demo:** https://doctor-tracker-three-gamma.vercel.app  ·  **API:** https://doctor-tracker-api-tawny.vercel.app/health
+**Demo login:** `admin@doctortracker.com` / `Password123!`
+
 ## 1. Description
 Doctor Tracker is a high-performance, full-stack healthcare administrative platform engineered to empower hospital operations with seamless physician workforce management, structured patient tracking, and real-time clinical analytics. Built with an decoupled architecture featuring a Next.js frontend client and a standalone Node.js/Express REST API backed by an indexed MongoDB cluster, Doctor Tracker delivers instantaneous search, multi-criteria filtering, and data aggregation to eliminate administrative overhead and enhance clinical visibility.
 

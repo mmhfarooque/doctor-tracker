@@ -427,4 +427,19 @@ Bugs it found and that were fixed:
 
 ---
 
+## 14. Deployment — 2026-11-17 (night)
+
+* GitHub (public): https://github.com/mmhfarooque/doctor-tracker — task PDF + `resource/` removed from all history (kept locally, git-ignored).
+* Vercel account farooque7-9785 (Hobby), both projects auto-deploy on push to `main`:
+  * **doctor-tracker-api** (root `server`, preset *Other*, `api/index.js` serverless adapter) → https://doctor-tracker-api-tawny.vercel.app
+    Env: `MONGODB_URI`, `JWT_SECRET` (new, production-only), `JWT_EXPIRES_IN=12h`, `CLIENT_URL=https://doctor-tracker-three-gamma.vercel.app`.
+  * **doctor-tracker** (root `client`, Next.js) → https://doctor-tracker-three-gamma.vercel.app
+    Env: `NEXT_PUBLIC_API_URL=https://doctor-tracker-api-tawny.vercel.app/api`, `NEXT_PUBLIC_SHOW_DEMO_LOGIN=true`.
+* Gotchas: the plain `doctor-tracker-api.vercel.app` belongs to someone else (names are global). Vercel's "Deploy" button on import created the projects but didn't start a build; an empty commit push did. Env changes need a new deploy (dashboard Redeploy didn't apply; a push did).
+* Verified live: health + DB, login, auth required, CORS allows only the frontend (others 403), 413 on oversized body, dashboard / doctors / patients / edit panel / quick search, mobile no sideways scroll, CSP `connect-src` = API origin, HSTS.
+* Production uses the same Atlas database `doctor_tracker` as local dev (demo data). `NEXT_PUBLIC_BASE_PATH` is ready if it moves under dev.mfaruk.com/<name> later.
+* **Owner TODO:** change the Atlas DB password (it appeared in a screenshot in chat) → update Vercel `MONGODB_URI` + local `server/.env` → push to redeploy. Enable 2FA on Vercel.
+
+---
+
 *This document serves as the single source of truth for the Doctor Tracker full-stack codebase. Any subsequent AI assistant or software engineer can read this file and have complete technical context.*
