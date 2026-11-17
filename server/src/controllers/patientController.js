@@ -1,22 +1,24 @@
 import Patient from '../models/Patient.js';
 import Doctor from '../models/Doctor.js';
+import { escapeRegex, sanitizeString, isValidEmail } from '../utils/sanitize.js';
 
 // @desc    Get all patients with search, filters & pagination
 // @route   GET /api/patients
 // @access  Private
 export const getPatients = async (req, res, next) => {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const skip = (page - 1) * limit;
 
     const { search, condition, status, doctor, startDate, endDate, sortBy = 'createdAt', order = 'desc' } = req.query;
 
     const query = {};
 
-    // Search functionality (name, condition, phone, email)
-    if (search && search.trim() !== '') {
-      const searchRegex = new RegExp(search.trim(), 'i');
+    // Search functionality with regex escaping to prevent ReDoS
+    if (search && typeof search === 'string' && search.trim() !== '') {
+      const cleanSearch = escapeRegex(search.trim());
+      const searchRegex = new RegExp(cleanSearch, 'i');
       query.$or = [
         { name: searchRegex },
         { condition: searchRegex },
@@ -26,36 +28,49 @@ export const getPatients = async (req, res, next) => {
     }
 
     // Filter by Condition
-    if (condition && condition !== 'all') {
-      query.condition = new RegExp(condition.trim(), 'i');
+    if (condition && typeof condition === 'string' && condition !== 'all') {
+      const cleanCond = escapeRegex(condition.trim());
+      query.condition = new RegExp(cleanCond, 'i');
     }
 
     // Filter by Status
-    if (status && status !== 'all') {
-      query.status = status;
+    if (status && typeof status === 'string' && status !== 'all') {
+      query.status = sanitizeString(status);
     }
 
-    // Filter by Assigned Doctor
-    if (doctor && doctor !== 'all') {
-      query.doctor = doctor;
+    // Filter by Assigned Doctor (validate ObjectId format)
+    if (doctor && typeof doctor === 'string' && doctor !== 'all') {
+      if (/^[0-9a-fA-F]{24}$/.test(doctor)) {
+        query.doctor = doctor;
+      }
     }
 
-    // Date-wise filtering (admissionDate or createdAt)
+    // Date-wise filtering
     if (startDate || endDate) {
       query.admissionDate = {};
       if (startDate) {
-        query.admissionDate.$gte = new Date(startDate);
+        const start = new Date(startDate);
+        if (!isNaN(start.getTime())) {
+          query.admissionDate.$gte = start;
+        }
       }
       if (endDate) {
         const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        query.admissionDate.$lte = end;
+        if (!isNaN(end.getTime())) {
+          end.setHours(23, 59, 59, 999);
+          query.admissionDate.$lte = end;
+        }
+      }
+      if (Object.keys(query.admissionDate).length === 0) {
+        delete query.admissionDate;
       }
     }
 
-    // Sort order
+    // Whitelist allowed sort keys
+    const allowedSortFields = ['createdAt', 'name', 'age', 'condition', 'status', 'admissionDate'];
+    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
     const sort = {};
-    sort[sortBy] = order === 'asc' ? 1 : -1;
+    sort[safeSortBy] = order === 'asc' ? 1 : -1;
 
     const [total, patients] = await Promise.all([
       Patient.countDocuments(query),
@@ -122,6 +137,14 @@ export const createPatient = async (req, res, next) => {
       });
     }
 
+    const safeAge = parseInt(age, 10);
+    if (isNaN(safeAge) || safeAge < 0 || safeAge > 130) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid age between 0 and 130',
+      });
+    }
+
     // Verify doctor exists
     const doctorExists = await Doctor.findById(doctor);
     if (!doctorExists) {
@@ -131,17 +154,30 @@ export const createPatient = async (req, res, next) => {
       });
     }
 
+    let cleanEmail = '';
+    if (email) {
+      cleanEmail = email.toLowerCase().trim();
+      if (!isValidEmail(cleanEmail)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid patient email address',
+        });
+      }
+    }
+
     const patient = await Patient.create({
-      name,
-      age,
-      gender,
-      condition,
-      status: status || 'Stable',
-      phone: phone || '',
-      email: email ? email.toLowerCase().trim() : '',
+      name: sanitizeString(name),
+      age: safeAge,
+      gender: ['Male', 'Female', 'Other'].includes(gender) ? gender : 'Male',
+      condition: sanitizeString(condition),
+      status: ['Stable', 'Critical', 'Under Observation', 'Recovering', 'Discharged'].includes(status)
+        ? status
+        : 'Stable',
+      phone: sanitizeString(phone || ''),
+      email: cleanEmail,
       doctor,
-      notes: notes || '',
-      admissionDate: admissionDate ? new Date(admissionDate) : new Date(),
+      notes: sanitizeString(notes || ''),
+      admissionDate: admissionDate && !isNaN(new Date(admissionDate).getTime()) ? new Date(admissionDate) : new Date(),
     });
 
     const populatedPatient = await Patient.findById(patient._id).populate('doctor', 'name specialization hospital');
@@ -181,19 +217,44 @@ export const updatePatient = async (req, res, next) => {
       }
     }
 
+    let cleanEmail = patient.email;
+    if (email) {
+      cleanEmail = email.toLowerCase().trim();
+      if (!isValidEmail(cleanEmail)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid patient email address',
+        });
+      }
+    }
+
+    let safeAge = patient.age;
+    if (age !== undefined) {
+      const parsedAge = parseInt(age, 10);
+      if (isNaN(parsedAge) || parsedAge < 0 || parsedAge > 130) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide a valid age between 0 and 130',
+        });
+      }
+      safeAge = parsedAge;
+    }
+
     patient = await Patient.findByIdAndUpdate(
       req.params.id,
       {
-        name: name || patient.name,
-        age: age !== undefined ? age : patient.age,
-        gender: gender || patient.gender,
-        condition: condition || patient.condition,
-        status: status || patient.status,
-        phone: phone !== undefined ? phone : patient.phone,
-        email: email !== undefined ? email.toLowerCase().trim() : patient.email,
+        name: name ? sanitizeString(name) : patient.name,
+        age: safeAge,
+        gender: gender && ['Male', 'Female', 'Other'].includes(gender) ? gender : patient.gender,
+        condition: condition ? sanitizeString(condition) : patient.condition,
+        status: status && ['Stable', 'Critical', 'Under Observation', 'Recovering', 'Discharged'].includes(status)
+          ? status
+          : patient.status,
+        phone: phone !== undefined ? sanitizeString(phone) : patient.phone,
+        email: cleanEmail,
         doctor: doctor || patient.doctor,
-        notes: notes !== undefined ? notes : patient.notes,
-        admissionDate: admissionDate ? new Date(admissionDate) : patient.admissionDate,
+        notes: notes !== undefined ? sanitizeString(notes) : patient.notes,
+        admissionDate: admissionDate && !isNaN(new Date(admissionDate).getTime()) ? new Date(admissionDate) : patient.admissionDate,
       },
       { new: true, runValidators: true }
     ).populate('doctor', 'name specialization hospital');
