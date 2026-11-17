@@ -524,6 +524,7 @@ Written by Claude after the Gemini/Codex session (§15–§16), verified on the 
 * **Re-verified after the rewrite:** no secrets anywhere in history (no credentialed Mongo URIs, no old JWT secret, no `resource/` or `.env` files ever committed); API tests **49/49 pass**.
 * **Live:** UI https://doctor-tracker-three-gamma.vercel.app · API https://doctor-tracker-api-tawny.vercel.app (both auto-deploy from `main`).
 * **Backups:** git (GitHub, public) + NAS snapshot `Backup/Doctor Tracker/repo-snapshots/` (tar.gz without `node_modules`/`.next`; includes `.env` files and `resource/` because the NAS is private — needed to restore).
+* **Status: COMPLETE — ready to submit (owner decision, 17 Nov 23:15).** No further security review or refactor planned; three audits done (§11, §12, §16).
 * **Still open for the owner:** change the Atlas DB password (it appeared in a chat screenshot) → update Vercel `MONGODB_URI` + local `server/.env`; enable Vercel 2FA; decide on the untracked image.
 
 ---
