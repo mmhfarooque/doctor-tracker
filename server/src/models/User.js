@@ -45,5 +45,14 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+// Defense-in-depth: Never expose password or internal version key in JSON serialization
+userSchema.set('toJSON', {
+  transform: (doc, ret) => {
+    delete ret.password;
+    delete ret.__v;
+    return ret;
+  },
+});
+
 const User = mongoose.model('User', userSchema);
 export default User;
