@@ -1,5 +1,7 @@
 # Doctor Tracker — Healthcare Administrative Web Portal
 
+**Developed and maintained by [Mahmud Farooque](https://github.com/mmhfarooque).**
+
 **Live demo:** https://doctor-tracker-three-gamma.vercel.app  ·  **API:** https://doctor-tracker-api-tawny.vercel.app/health
 
 ### Demo Logins (Password for all: `Password123!`):
