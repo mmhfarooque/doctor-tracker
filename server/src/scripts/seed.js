@@ -259,8 +259,8 @@ const seedDB = async () => {
 
     await mongoose.disconnect();
     process.exit(0);
-  } catch (error) {
-    console.error(`[Seeder Error]: ${error.message}`);
+  } catch {
+    console.error('[Seeder] Operation failed');
     process.exit(1);
   }
 };

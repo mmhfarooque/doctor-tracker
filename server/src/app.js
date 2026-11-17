@@ -6,6 +6,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
+import { MongoRateLimitStore } from './utils/rateLimitStore.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { mongoSanitizeMiddleware } from './middleware/sanitizeMiddleware.js';
 
@@ -17,9 +18,11 @@ import activityRoutes from './routes/activityRoutes.js';
 import shiftRoutes from './routes/shiftRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 
+// Bound database work even when substring searches cannot use a B-tree index.
+mongoose.set('maxTimeMS', 2000);
 const app = express();
 // Trust reverse proxy for accurate IP identification in rate limiters (VPS / Nginx)
-app.set('trust proxy', 1);
+app.set('trust proxy', process.env.TRUST_PROXY_HOPS ? Number(process.env.TRUST_PROXY_HOPS) : (process.env.VERCEL ? 1 : false));
 
 // Obfuscate server technology fingerprint
 app.disable('x-powered-by');
@@ -27,17 +30,26 @@ app.disable('x-powered-by');
 // 1. Helmet HTTP Security Headers
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Set false for REST API server to prevent CORS/Asset blocking
+    contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } },
+    frameguard: { action: 'deny' },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
+
+// Clinical Data Anti-Caching Headers (prevents intermediate and browser disk storage of sensitive medical data)
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
 
 // 2. CORS Configuration with origin validation
 // CLIENT_URL may hold several comma-separated origins (e.g. the Vercel production URL and a custom domain)
 const allowedOrigins = [
   ...(process.env.CLIENT_URL || '').split(',').map((o) => o.trim()),
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
+  ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000', 'http://127.0.0.1:3000']),
 ].filter(Boolean);
 
 app.use(
@@ -73,6 +85,7 @@ const userOrIpKey = (req) => {
 };
 
 const apiLimiter = rateLimit({
+  ...(process.env.NODE_ENV === 'production' ? { store: new MongoRateLimitStore('api') } : {}),
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: (req) => (userOrIpKey(req).startsWith('user:') ? 1500 : 300),
   keyGenerator: userOrIpKey,
@@ -85,6 +98,7 @@ const apiLimiter = rateLimit({
 });
 
 const authLimiter = rateLimit({
+  ...(process.env.NODE_ENV === 'production' ? { store: new MongoRateLimitStore('auth') } : {}),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 25, // Max 25 login/register attempts per 15 min per IP
   standardHeaders: true,
@@ -100,24 +114,15 @@ app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 
 // 4. Body Parsers with payload limits & NoSQL / Parameter Pollution Sanitization
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 app.use(mongoSanitizeMiddleware);
 app.use(hpp());
-
-// 5. Clinical Data Anti-Caching Headers (prevents intermediate and browser disk storage of sensitive medical data)
-app.use('/api', (req, res, next) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.set('Pragma', 'no-cache');
-  res.set('Expires', '0');
-  res.set('Surrogate-Control', 'no-store');
-  next();
-});
 
 // Logging
 if (process.env.NODE_ENV !== 'test') {
   // Log the path only: query strings carry search terms such as patient names (protected health information)
-  morgan.token('path', (req) => req.originalUrl.split('?')[0]);
+  morgan.token('path', (req) => req.route?.path ? String(req.baseUrl || '') + req.route.path : '/unmatched');
   app.use(morgan(':method :path :status :res[content-length] - :response-time ms'));
 }
 

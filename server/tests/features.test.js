@@ -250,6 +250,60 @@ test('staff accounts: admin creates a linked doctor login; rules enforced', asyn
   assert.equal((await call('admin', 'DELETE', `/users/${self._id}`)).status, 400);
 });
 
+test('doctor cannot read another caseload through directory or profile', async () => {
+  const list = await call('doctor', 'GET', '/doctors?limit=100');
+  assert.equal(list.body.data.find((d) => d._id === String(docB._id)).patientCount, undefined);
+  const profile = await call('doctor', 'GET', `/doctors/${docB._id}`);
+  assert.equal(profile.body.data.statusCounts, undefined);
+  assert.equal(profile.body.data.patientCount, undefined);
+});
+
+test('transfers require reasons and revoke all former doctor activity access', async () => {
+  const patient = await admit('doctor', { name: 'Transferred private record', status: 'Critical' });
+  const id = patient.body.data._id;
+  assert.equal((await call('doctor', 'POST', `/patients/${id}/transfer`, { doctor: String(docB._id) })).status, 400);
+  assert.equal((await call('admin', 'PUT', `/patients/${id}`, { doctor: String(docB._id) })).status, 403);
+  assert.equal((await call('doctor', 'POST', `/patients/${id}/transfer`, { doctor: String(docB._id), reason: 'Specialist review' })).status, 200);
+  for (const path of ['/activity', '/alerts', '/dashboard/stats']) {
+    const result = await call('doctor', 'GET', path);
+    assert.equal(JSON.stringify(result.body).includes('Transferred private record'), false, path);
+  }
+  assert.equal((await call('doctor', 'GET', `/patients/${id}/history`)).status, 404);
+});
+
+test('audit failure rolls back clinical changes', async () => {
+  const patient = await admit('doctor', { name: 'Audit rollback', notes: 'Original' });
+  const id = patient.body.data._id;
+  const original = Activity.insertMany;
+  try {
+    Activity.insertMany = async () => { throw new Error('Synthetic audit failure'); };
+    assert.equal((await call('doctor', 'PUT', `/patients/${id}`, { notes: 'Must roll back' })).status, 500);
+    assert.equal((await Patient.findById(id)).notes, 'Original');
+  } finally { Activity.insertMany = original; }
+});
+
+test('detail audit records capture actor and before/after values', async () => {
+  const patient = await admit('doctor', { name: 'Audit detail', notes: 'Before' });
+  const id = patient.body.data._id;
+  assert.equal((await call('doctor', 'PUT', `/patients/${id}`, { notes: 'After' })).status, 200);
+  const event = await Activity.findOne({ patient: id, type: 'patient.updated' });
+  assert.equal(event.changes[0].field, 'notes');
+  assert.equal(event.changes[0].from, 'Before');
+  assert.equal(event.changes[0].to, 'After');
+  assert.equal(event.actor.role, 'doctor');
+  assert.ok(event.actor.id);
+  assert.ok(event.createdAt);
+});
+
+test('independent limiter instances share atomic counters', async () => {
+  const { MongoRateLimitStore } = await import('../src/utils/rateLimitStore.js');
+  const stores = [new MongoRateLimitStore('test'), new MongoRateLimitStore('test')];
+  stores.forEach((store) => store.init({ windowMs: 900000 }));
+  await stores[0].resetKey('shared');
+  const results = await Promise.all(Array.from({ length: 10 }, (_, i) => stores[i % 2].increment('shared')));
+  assert.deepEqual(results.map((r) => r.totalHits).sort((a, b) => a - b), [1,2,3,4,5,6,7,8,9,10]);
+});
+
 test('reassign a whole caseload, then the doctor can be deleted', async () => {
   assert.equal((await call('admin', 'DELETE', `/doctors/${docA._id}`)).status, 409);
   const r = await call('admin', 'POST', `/doctors/${docA._id}/reassign`, { doctor: String(docB._id) });

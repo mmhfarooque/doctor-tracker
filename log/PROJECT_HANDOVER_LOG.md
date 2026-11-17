@@ -490,4 +490,29 @@ Full completion of all 12 extension features and end-to-end verification across 
 
 ---
 
+## 16. Security Audit & Hardening (Codex Review) — 2026-11-17 (night)
+
+A comprehensive security audit was executed by OpenAI Codex covering all 7 critical application security pillars.
+
+### Audit Findings & Remediations:
+* **2 High, 5 Medium, 3 Low findings** identified and fully remediated locally (detailed in `security/AUDIT-2026-11-17.md` and `security/audit-fixes.patch`).
+1. **Activity Feeds Scoping After Transfer (High):** Bounded `readActivity(req)` in `utils/scope.js` to ensure former attending physicians cannot access historical activity feeds once a patient is transferred away.
+2. **Clinical Statistics Leakage via Doctor Directory/Profile (Medium):** Applied `canAccessDoctor` before calculating or returning patient counts and clinical status distributions, preventing doctors from enumerating another doctor's clinical caseload breakdown.
+3. **PHI Exposure in Logs (High):** Neutralized Protected Health Information exposure in HTTP request logs, fatal errors, Mongoose exceptions, and activity failures. Replaced raw error messages and URLs with fixed operational descriptions (`/unmatched` instead of echoing unknown paths).
+4. **Audit Durability via MongoDB Transactions (Medium):** Implemented `utils/auditedMutation.js` wrapping all patient mutations, admissions, transfers, and archive actions in atomic sessions. If an audit write fails, the clinical mutation automatically rolls back. Recorded explicit `changes[{field, from, to}]` before/after tracking.
+5. **Serverless Distributed Rate Limiting (Medium):** Replaced in-memory rate limiting with atomic MongoDB counters (`utils/rateLimitStore.js`) with TTL expiration, ensuring limits persist across serverless instances and worker recycling.
+6. **Reverse Proxy & Forwarded IP Spoofing (Medium):** Configured strict proxy trust handling (`trust proxy = 0` default for standalone; 1 hop for Vercel; configurable via `TRUST_PROXY_HOPS`).
+7. **Resource Bounds & DoS Mitigation (Medium):** Installed `mongoose.set('maxTimeMS', 2000)` query execution deadlines across all search, list, and aggregation operations. Hardened email validation to 254 characters.
+8. **Payload Budget & Cache Header Ordering (Low):** Reduced JSON and URL-encoded parsers from 1 MB to `10kb` limit. Moved `/api` `Cache-Control: no-store` and `X-Frame-Options: DENY` headers ahead of body parsing and rate limiting.
+9. **Production CORS Strictness (Low):** Removed implicit `localhost` permissions in production environment; only configured `CLIENT_URL` is whitelisted.
+10. **CSV Formula Injection Hardening (Low):** Expanded CSV injection guard regex to neutralize line-feed (`\n`) and whitespace-obscured formula prefixes (`^(?:[\t\r\n]|\s*[=+\-@])`).
+
+### Verification & Test Suite Status:
+- **49 / 49** Backend integration & security regression tests passing (`server/npm test`).
+- **85 / 85** Puppeteer Browser QA checks passing (`qa/browser-qa.mjs`).
+- **0 errors, 0 warnings** in ESLint across both client and server (`npm run lint`).
+- **0 errors** in Next.js 16 Turbopack production build (`client/npm run build`).
+
+---
+
 *This document serves as the single source of truth for the Doctor Tracker full-stack codebase. Any subsequent AI assistant or software engineer can read this file and have complete technical context.*

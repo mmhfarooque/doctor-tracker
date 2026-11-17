@@ -28,11 +28,11 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 // A bug that escapes every try/catch should be visible in logs, and the process restarted cleanly
-process.on('unhandledRejection', (reason) => {
-  console.error('[Fatal] Unhandled promise rejection:', reason);
+process.on('unhandledRejection', () => {
+  console.error('[Error] Operation failed');
   shutdown('unhandledRejection');
 });
-process.on('uncaughtException', (err) => {
-  console.error('[Fatal] Uncaught exception:', err);
+process.on('uncaughtException', () => {
+  console.error('[Error] Operation failed');
   shutdown('uncaughtException');
 });

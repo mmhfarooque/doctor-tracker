@@ -201,3 +201,59 @@ test('invalid ObjectId returns 400', async () => {
   const res = await api('GET', '/patients/not-an-id');
   assert.equal(res.status, 400);
 });
+
+
+test('10 KB payload boundary returns 413 with no-store and DENY', async () => {
+  const result = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'x@example.com', password: 'x'.repeat(11000) }) });
+  assert.equal(result.status, 413);
+  assert.match(result.headers.get('cache-control'), /no-store/);
+  assert.equal(result.headers.get('x-frame-options'), 'DENY');
+});
+
+test('CSV neutralises control and whitespace formula prefixes', async () => {
+  const { toCsv } = await import('../src/utils/csv.js');
+  for (const value of ['=1+1', '+1', '-1', '@SUM(A1)', '\t=1', '\r=1', '\n=1', '  =1']) {
+    assert.match(toCsv([], [[value]]).split('\r\n')[1], /^"?'/);
+  }
+});
+
+test('production startup CORS excludes localhost unless explicitly configured', async () => {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const code = `
+    import app from './src/app.js';
+    const server = app.listen(0);
+    const base = 'http://127.0.0.1:' + server.address().port;
+    const output = [];
+    for (const origin of ['http://localhost:3000', 'https://staff.example']) {
+      const response = await fetch(base + '/health', { headers: { Origin: origin } });
+      output.push({ status: response.status, origin: response.headers.get('access-control-allow-origin') });
+    }
+    console.log(JSON.stringify(output));
+    server.close();
+    server.closeAllConnections();
+  `;
+  const { stdout } = await promisify(execFile)(process.execPath, ['--input-type=module', '-e', code], {
+    env: { ...process.env, NODE_ENV: 'production', CLIENT_URL: 'https://staff.example' },
+  });
+  const results = JSON.parse(stdout.trim().split('\n').at(-1));
+  assert.equal(results[0].status, 403);
+  assert.equal(results[0].origin, null);
+  assert.equal(results[1].origin, 'https://staff.example');
+});
+
+test('error logs and validation responses never contain rejected clinical values', async () => {
+  const { errorHandler } = await import('../src/middleware/errorHandler.js');
+  const marker = 'PRIVATE_PATIENT_AND_DIAGNOSIS';
+  const captured = [];
+  const original = console.error;
+  let body;
+  const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { body = value; } };
+  try {
+    console.error = (...args) => captured.push(args.join(' '));
+    errorHandler({ name: 'ValidationError', message: marker, errors: { condition: { message: marker } } }, {}, response, () => {});
+    assert.equal(response.statusCode, 400);
+    assert.equal(JSON.stringify(body).includes(marker), false);
+    assert.equal(captured.join().includes(marker), false);
+  } finally { console.error = original; }
+});

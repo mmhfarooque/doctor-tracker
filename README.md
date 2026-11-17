@@ -283,11 +283,11 @@ Doctor Tracker/
 
 ## 7. Testing
 
-### Backend Integration Tests (40 / 40 Passing)
+### Backend Integration Tests (49 / 49 Passing)
 ```bash
 cd server && npm test
 ```
-40 integration tests (built-in `node:test`, no external test runner required) cover:
+49 integration and security regression tests (built-in `node:test`, no external test runner required) cover:
 - Authentication & JWT issuance, password security, NoSQL-injection defense, route protection
 - Roles & scoping: Administrator, Doctor (scoped to assigned patients), Nurse (status/notes/follow-up only)
 - Patient transfer between doctors with reason logging; doctor deletion safeguards
@@ -295,6 +295,7 @@ cd server && npm test
 - Shift management, overlap prevention, on-call queries
 - Bulk actions, CSV export with formula injection sanitization, soft-archive and restore
 - Doctor capacity meters and critical alerts tracking
+- Security hardening: audit rollback on failure, post-transfer activity scoping, foreign doctor stats isolation, distributed rate-limit counters, 10 KB payload boundaries, and sanitized error logging (zero PHI in logs)
 Tests execute against an isolated `doctor_tracker_test` database dropped immediately after completion.
 
 ### Browser QA Automation (85 / 85 Passing)

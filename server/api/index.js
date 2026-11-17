@@ -17,16 +17,17 @@ const connect = () => {
 };
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
   if (!process.env.MONGODB_URI || !process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
     res.statusCode = 500;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ success: false, message: 'Server is not configured (MONGODB_URI / JWT_SECRET missing).' }));
+    res.end(JSON.stringify({ success: false, message: 'Internal Server Error' }));
     return;
   }
   try {
     await connect();
-  } catch (err) {
-    console.error('[MongoDB] connection failed:', err.message);
+  } catch {
+    console.error('[Error] Operation failed');
     res.statusCode = 503;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ success: false, message: 'Database temporarily unavailable. Please try again.' }));

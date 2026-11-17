@@ -36,7 +36,7 @@ export const sanitizeString = (str, maxLength = 300) => {
  * @returns {boolean}
  */
 export const isValidEmail = (email) => {
-  if (typeof email !== 'string') return false;
+  if (typeof email !== 'string' || email.length > 254) return false;
   const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
   return emailRegex.test(email.trim());
 };

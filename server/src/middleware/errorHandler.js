@@ -1,6 +1,6 @@
 export const errorHandler = (err, req, res, _next) => {
   const isProduction = process.env.NODE_ENV === 'production';
-  console.error('[Error]', isProduction ? err.message : err.stack || err.message);
+  console.error('[Error] Request failed');
 
   // Errors raised by Express / body-parser carry their own 4xx status (413 too large, 415, 400 …)
   let statusCode = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
@@ -23,9 +23,7 @@ export const errorHandler = (err, req, res, _next) => {
   // Mongoose validation
   if (err.name === 'ValidationError') {
     statusCode = 400;
-    message = Object.values(err.errors)
-      .map((val) => val.message)
-      .join(', ');
+    message = 'Invalid record fields';
   }
 
   if (err.type === 'entity.parse.failed') {
@@ -50,6 +48,5 @@ export const errorHandler = (err, req, res, _next) => {
   res.status(statusCode).json({
     success: false,
     message,
-    ...(isProduction ? {} : { stack: err.stack }),
   });
 };

@@ -91,11 +91,11 @@ export const getDoctors = async (req, res, next) => {
       Doctor.countDocuments(query),
       Doctor.find(query).sort(sort).skip((page - 1) * limit).limit(limit).select('-__v').lean(),
     ]);
-    const counts = await caseloads(doctors.map((d) => d._id));
+    const counts = await caseloads(doctors.filter((d) => canAccessDoctor(req, d._id)).map((d) => d._id));
 
     res.json({
       success: true,
-      data: doctors.map((d) => ({ ...d, patientCount: counts[String(d._id)] || 0 })),
+      data: doctors.map((d) => ({ ...d, ...(canAccessDoctor(req, d._id) ? { patientCount: counts[String(d._id)] || 0 } : {}) })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
@@ -119,6 +119,8 @@ export const getDoctorById = async (req, res, next) => {
     if (!isValidObjectId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid doctor ID format' });
     const doctor = await Doctor.findById(req.params.id).select('-__v').lean();
     if (!doctor) return res.status(404).json({ success: false, message: 'Doctor not found' });
+
+    if (!canAccessDoctor(req, doctor._id)) return res.json({ success: true, data: doctor });
 
     const now = new Date();
     const [byStatus, onCall, nextShift] = await Promise.all([
@@ -198,7 +200,8 @@ export const reassignDoctorPatients = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Choose the doctor who takes over these patients' });
     }
     if (target === req.params.id) return res.status(400).json({ success: false, message: 'Choose a different doctor' });
-    const [from, to] = await Promise.all([Doctor.findById(req.params.id), Doctor.findById(target)]);
+    const from = await Doctor.findById(req.params.id);
+    const to = await Doctor.findById(target);
     if (!from || !to) return res.status(404).json({ success: false, message: 'Doctor not found' });
 
     const patients = await Patient.find({ doctor: from._id }).select('name doctor');

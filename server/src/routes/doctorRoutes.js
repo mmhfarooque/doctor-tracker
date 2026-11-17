@@ -1,3 +1,4 @@
+import { auditedMutation } from '../utils/auditedMutation.js';
 import express from 'express';
 import {
   getDoctors,
@@ -23,10 +24,10 @@ router.post('/', authorize('admin'), createDoctor);
 router.get('/:id', getDoctorById);
 router.put('/:id', authorize('admin'), updateDoctor);
 router.delete('/:id', authorize('admin'), deleteDoctor);
-router.post('/:id/reassign', authorize('admin'), reassignDoctorPatients);
+router.post('/:id/reassign', authorize('admin'), auditedMutation(reassignDoctorPatients));
 
 router.get('/:id/patients', getDoctorPatients); // doctors: own roster only (checked inside)
-router.post('/:id/patients', authorize('admin', 'doctor'), addPatientToDoctor);
-router.delete('/:id/patients/:patientId', authorize('admin'), deletePatientFromDoctor);
+router.post('/:id/patients', authorize('admin', 'doctor'), auditedMutation(addPatientToDoctor));
+router.delete('/:id/patients/:patientId', authorize('admin'), auditedMutation(deletePatientFromDoctor));
 
 export default router;

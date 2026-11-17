@@ -29,6 +29,7 @@ const activitySchema = new mongoose.Schema(
       name: String,
       role: String,
     },
+    changes: [{ _id: false, field: String, from: String, to: String }],
     from: { type: String, default: '' },
     to: { type: String, default: '' },
     note: { type: String, default: '' },

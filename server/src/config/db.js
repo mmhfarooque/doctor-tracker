@@ -11,16 +11,16 @@ const connectDB = async () => {
 
     console.log(`[MongoDB] Connected successfully: ${conn.connection.host}`);
 
-    mongoose.connection.on('error', (err) => {
-      console.error(`[MongoDB] Connection runtime error: ${err.message}`);
+    mongoose.connection.on('error', () => {
+      console.error('[Error] Operation failed');
     });
 
     mongoose.connection.on('disconnected', () => {
       console.warn('[MongoDB] Disconnected from database cluster.');
     });
 
-  } catch (error) {
-    console.error(`[MongoDB] Connection error: ${error.message}`);
+  } catch {
+    console.error('[Error] Operation failed');
     process.exit(1);
   }
 };

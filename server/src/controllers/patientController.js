@@ -278,21 +278,17 @@ export const updatePatient = async (req, res, next) => {
       }
     }
 
-    // Reassignment through the edit form is allowed for admins and logged as a transfer
-    let newDoctor = null;
+    // Transfers require a reason and use the dedicated transfer endpoint.
     const requestedDoctor = asString(req.body.doctor);
     if (requestedDoctor && requestedDoctor !== String(patient.doctor)) {
-      if (!isAdmin(req)) return res.status(403).json({ success: false, message: 'Use Transfer to move a patient to another doctor' });
-      if (!isValidObjectId(requestedDoctor)) return res.status(400).json({ success: false, message: 'Invalid assigned doctor ID format' });
-      newDoctor = await Doctor.findById(requestedDoctor);
-      if (!newDoctor) return res.status(404).json({ success: false, message: 'Assigned doctor not found' });
+      return res.status(403).json({ success: false, message: 'Use Transfer to move a patient to another doctor with a reason' });
     }
 
     const before = { status: patient.status, followUpDate: patient.followUpDate, doctor: patient.doctor };
     const changed = Object.keys(fields).filter((k) => !sameValue(fields[k], patient[k]));
+    const changes = changed.map((field) => ({ field, from: String(patient[field] ?? ''), to: String(fields[field] ?? '') }));
     applyDischarge(patient, fields.status);
     Object.assign(patient, fields);
-    if (newDoctor) patient.doctor = newDoctor._id;
     await patient.save();
 
     const events = [];
@@ -304,16 +300,13 @@ export const updatePatient = async (req, res, next) => {
         type: 'patient.followup',
         patient,
         doctors: [patient.doctor],
+        from: before.followUpDate ? before.followUpDate.toISOString().slice(0, 10) : '',
         to: fields.followUpDate ? fields.followUpDate.toISOString().slice(0, 10) : '',
         note: fields.followUpDate ? 'Follow-up scheduled' : 'Follow-up cleared',
       });
     }
-    if (newDoctor) {
-      const oldDoc = await Doctor.findById(before.doctor).select('name').lean();
-      events.push({ type: 'patient.transferred', patient, doctors: [before.doctor, newDoctor._id], from: oldDoc?.name || '', to: newDoctor.name });
-    }
     if (changed.some((k) => !['status', 'followUpDate'].includes(k))) {
-      events.push({ type: 'patient.updated', patient, doctors: [patient.doctor], note: 'Record details updated' });
+      events.push({ type: 'patient.updated', patient, doctors: [patient.doctor], note: 'Record details updated', changes });
     }
     if (events.length) await logActivities(req, events);
 
@@ -329,10 +322,13 @@ export const transferPatient = async (req, res, next) => {
   try {
     const patient = await loadPatient(req, res);
     if (!patient) return;
+    const reason = sanitizeString(asString(req.body.reason), 300);
+    if (!reason) return res.status(400).json({ success: false, message: 'A transfer reason is required' });
     const target = asString(req.body.doctor);
     if (!isValidObjectId(target)) return res.status(400).json({ success: false, message: 'Choose the doctor to transfer to' });
     if (target === String(patient.doctor)) return res.status(400).json({ success: false, message: 'The patient is already under this doctor' });
-    const [fromDoc, toDoc] = await Promise.all([Doctor.findById(patient.doctor).select('name'), Doctor.findById(target)]);
+    const fromDoc = await Doctor.findById(patient.doctor).select('name');
+    const toDoc = await Doctor.findById(target);
     if (!toDoc) return res.status(404).json({ success: false, message: 'Doctor not found' });
 
     patient.doctor = toDoc._id;
@@ -343,7 +339,7 @@ export const transferPatient = async (req, res, next) => {
       doctors: [fromDoc?._id, toDoc._id],
       from: fromDoc?.name,
       to: toDoc.name,
-      note: sanitizeString(asString(req.body.reason), 300),
+      note: reason,
     });
     await patient.populate('doctor', POPULATE_DOCTOR);
     res.json({ success: true, message: `Transferred to ${toDoc.name}`, data: patient });
@@ -360,7 +356,7 @@ export const archivePatient = async (req, res, next) => {
     patient.archivedAt = new Date();
     patient.archivedBy = req.user._id;
     await patient.save();
-    await logActivity(req, { type: 'patient.archived', patient, doctors: [patient.doctor] });
+    await logActivity(req, { type: 'patient.archived', patient, doctors: [patient.doctor], from: 'active', to: 'archived' });
     res.json({ success: true, message: 'Patient archived' });
   } catch (error) {
     next(error);
@@ -375,7 +371,7 @@ export const restorePatient = async (req, res, next) => {
     patient.archivedAt = null;
     patient.archivedBy = null;
     await patient.save();
-    await logActivity(req, { type: 'patient.restored', patient, doctors: [patient.doctor] });
+    await logActivity(req, { type: 'patient.restored', patient, doctors: [patient.doctor], from: 'archived', to: 'active' });
     res.json({ success: true, message: 'Patient restored' });
   } catch (error) {
     next(error);
@@ -389,7 +385,7 @@ export const deletePatient = async (req, res, next) => {
     const patient = await Patient.findById(req.params.id);
     if (!patient) return res.status(404).json({ success: false, message: 'Patient not found' });
     await Patient.deleteOne({ _id: patient._id });
-    await logActivity(req, { type: 'patient.deleted', patient, doctors: [patient.doctor], note: 'Permanently deleted' });
+    await logActivity(req, { type: 'patient.deleted', patient, doctors: [patient.doctor], from: patient.archivedAt ? 'archived' : 'active', to: 'deleted', note: 'Permanently deleted' });
     res.json({ success: true, message: 'Patient deleted successfully' });
   } catch (error) {
     next(error);
@@ -413,7 +409,7 @@ export const bulkPatients = async (req, res, next) => {
         p.status = status;
         return { type: 'patient.status', patient: p, doctors: [p.doctor], from, to: status, note: 'Bulk update' };
       });
-      await Promise.all(changed.map((p) => p.save()));
+      for (const patient of changed) await patient.save();
       await logActivities(req, events);
       return res.json({ success: true, message: `${changed.length} patient(s) updated`, updated: changed.length });
     }
@@ -428,7 +424,7 @@ export const bulkPatients = async (req, res, next) => {
       );
       await logActivities(
         req,
-        patients.map((p) => ({ type: archiving ? 'patient.archived' : 'patient.restored', patient: p, doctors: [p.doctor], note: 'Bulk action' }))
+        patients.map((p) => ({ type: archiving ? 'patient.archived' : 'patient.restored', patient: p, doctors: [p.doctor], from: archiving ? 'active' : 'archived', to: archiving ? 'archived' : 'active', note: 'Bulk action' }))
       );
       return res.json({ success: true, message: `${patients.length} patient(s) ${archiving ? 'archived' : 'restored'}`, updated: patients.length });
     }

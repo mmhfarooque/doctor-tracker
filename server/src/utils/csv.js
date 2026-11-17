@@ -4,7 +4,7 @@
  */
 const cell = (value) => {
   let s = value === null || value === undefined ? '' : String(value);
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  if (/^(?:[\t\r\n]|\s*[=+\-@])/u.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 

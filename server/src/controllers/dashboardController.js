@@ -1,8 +1,7 @@
 import Doctor from '../models/Doctor.js';
 import Patient from '../models/Patient.js';
-import Activity from '../models/Activity.js';
 import Shift from '../models/Shift.js';
-import { patientScope, isDoctor } from '../utils/scope.js';
+import { patientScope, isDoctor, readActivity } from '../utils/scope.js';
 
 const DAY = 86400000;
 
@@ -17,7 +16,6 @@ export const getDashboardStats = async (req, res, next) => {
     const tomorrow = new Date(today.getTime() + DAY);
     const weekEnd = new Date(today.getTime() + 7 * DAY);
     const since = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-    const activityScope = isDoctor(req) ? { doctors: req.user.doctor } : {};
     const monthKey = (field) => ({ $dateToString: { format: '%Y-%m', date: field } });
 
     const [
@@ -103,7 +101,7 @@ export const getDashboardStats = async (req, res, next) => {
         { $group: { _id: null, avgDays: { $avg: '$days' }, discharged: { $sum: 1 } } },
       ]),
       Shift.find({ start: { $lte: now }, end: { $gt: now } }).populate('doctor', 'name specialization').sort({ type: 1 }).lean(),
-      Activity.find(activityScope).sort({ createdAt: -1 }).limit(8).lean(),
+      readActivity(req, { limit: 8 }),
     ]);
 
     // Fill all 12 months so the chart shows gaps as zero

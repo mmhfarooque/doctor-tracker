@@ -1,8 +1,5 @@
-import Activity from '../models/Activity.js';
 import User from '../models/User.js';
-import { isDoctor } from '../utils/scope.js';
-
-const scopeFor = (req) => (isDoctor(req) ? { doctors: req.user.doctor } : {});
+import { readActivity } from '../utils/scope.js';
 
 // Critical events: a status change to Critical, or a patient admitted as Critical
 const CRITICAL = { $or: [{ type: 'patient.status', to: 'Critical' }, { type: 'patient.admitted', to: 'Critical' }] };
@@ -11,7 +8,7 @@ const CRITICAL = { $or: [{ type: 'patient.status', to: 'Critical' }, { type: 'pa
 export const getActivity = async (req, res, next) => {
   try {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
-    const items = await Activity.find(scopeFor(req)).sort({ createdAt: -1 }).limit(limit).lean();
+    const items = await readActivity(req, { limit });
     res.json({ success: true, data: items });
   } catch (error) {
     next(error);
@@ -21,11 +18,11 @@ export const getActivity = async (req, res, next) => {
 // @route GET /api/alerts — latest critical-patient alerts and how many are unread for this user
 export const getAlerts = async (req, res, next) => {
   try {
-    const filter = { ...scopeFor(req), ...CRITICAL };
+    const filter = CRITICAL;
     const seen = req.user.alertsSeenAt || new Date(0);
     const [items, unread] = await Promise.all([
-      Activity.find(filter).sort({ createdAt: -1 }).limit(15).lean(),
-      Activity.countDocuments({ ...filter, createdAt: { $gt: seen } }),
+      readActivity(req, { filter, limit: 15 }),
+      readActivity(req, { filter: { ...filter, createdAt: { $gt: seen } }, count: true }),
     ]);
     res.json({ success: true, data: { unread, seenAt: seen, items } });
   } catch (error) {
