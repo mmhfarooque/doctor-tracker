@@ -86,6 +86,15 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(mongoSanitizeMiddleware);
 app.use(hpp());
 
+// 5. Clinical Data Anti-Caching Headers (prevents intermediate and browser disk storage of sensitive medical data)
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
+
 // Logging
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
