@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import useApi from '../../hooks/useApi';
 import Drawer from '../ui/Drawer';
 import Field from '../ui/Field';
 import api from '../../lib/api';
@@ -10,37 +11,35 @@ import { useToast } from '../ui/Toast';
 
 const EMPTY = { name: '', specialization: '', hospital: '', phone: '', email: '', status: 'Active', experienceYears: '', bio: '' };
 
-/** Create or edit a doctor in a side drawer. `doctor` = null creates a new one. */
-export default function DoctorForm({ open, doctor, onClose, onSaved }) {
+const fromDoctor = (doctor) =>
+  doctor
+    ? {
+        name: doctor.name || '',
+        specialization: doctor.specialization || '',
+        hospital: doctor.hospital || '',
+        phone: doctor.phone || '',
+        email: doctor.email || '',
+        status: doctor.status || 'Active',
+        experienceYears: doctor.experienceYears ?? '',
+        bio: doctor.bio || '',
+      }
+    : EMPTY;
+
+/**
+ * Create or edit a doctor in a side drawer. `doctor` = null creates a new one.
+ * The panel is mounted fresh on every open, so its state always starts from the given doctor.
+ */
+export default function DoctorForm({ open, ...props }) {
+  return open ? <DoctorFormPanel {...props} /> : null;
+}
+
+function DoctorFormPanel({ doctor, onClose, onSaved }) {
   const notify = useToast();
-  const [form, setForm] = useState(EMPTY);
-  const [options, setOptions] = useState({ specializations: [], hospitals: [] });
+  const [form, setForm] = useState(() => fromDoctor(doctor));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const editing = Boolean(doctor?._id);
-
-  useEffect(() => {
-    if (!open) return;
-    setError('');
-    setForm(
-      doctor
-        ? {
-            name: doctor.name || '',
-            specialization: doctor.specialization || '',
-            hospital: doctor.hospital || '',
-            phone: doctor.phone || '',
-            email: doctor.email || '',
-            status: doctor.status || 'Active',
-            experienceYears: doctor.experienceYears ?? '',
-            bio: doctor.bio || '',
-          }
-        : EMPTY,
-    );
-    api
-      .get('/doctors/filters')
-      .then((res) => setOptions(res.data.data))
-      .catch(() => {});
-  }, [open, doctor]);
+  const options = useApi('/doctors/filters').data?.data || { specializations: [], hospitals: [] };
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -63,7 +62,7 @@ export default function DoctorForm({ open, doctor, onClose, onSaved }) {
 
   return (
     <Drawer
-      open={open}
+      open
       onClose={onClose}
       title={editing ? 'Edit doctor' : 'Add doctor'}
       description={editing ? doctor.name : 'Name, specialty, hospital and contact details are required.'}

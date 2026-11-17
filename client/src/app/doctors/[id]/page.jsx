@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Building2, Mail, Phone, CalendarDays, Award, Pencil, UserPlus, MoreHorizontal, Trash2, Users } from 'lucide-react';
 import api from '../../../lib/api';
 import useDebounce from '../../../hooks/useDebounce';
+import useApi from '../../../hooks/useApi';
 import Avatar from '../../../components/ui/Avatar';
 import StatusBadge from '../../../components/ui/StatusBadge';
 import SearchInput from '../../../components/ui/SearchInput';
@@ -27,17 +28,10 @@ export default function DoctorProfilePage() {
   const router = useRouter();
   const notify = useToast();
 
-  const [doctor, setDoctor] = useState(null);
-  const [doctorError, setDoctorError] = useState('');
-
-  const [patients, setPatients] = useState([]);
-  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
   const debouncedSearch = useDebounce(search, 300);
-  const requestSeq = useRef(0);
 
   const [editingDoctor, setEditingDoctor] = useState(false);
   const [patientForm, setPatientForm] = useState(undefined); // undefined closed, null admit, object edit
@@ -46,41 +40,22 @@ export default function DoctorProfilePage() {
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState('');
 
-  const fetchDoctor = useCallback(async () => {
-    try {
-      const res = await api.get(`/doctors/${id}`);
-      setDoctor(res.data.data);
-    } catch (err) {
-      setDoctorError(apiError(err, 'This doctor could not be loaded.'));
-    }
-  }, [id]);
-
-  const fetchRoster = useCallback(async () => {
-    const seq = ++requestSeq.current;
-    setLoading(true);
+  const rosterQuery = useMemo(() => {
     const q = new URLSearchParams({ page, limit: LIMIT });
     if (debouncedSearch.trim()) q.set('search', debouncedSearch.trim());
     if (status) q.set('status', status);
-    try {
-      const res = await api.get(`/doctors/${id}/patients?${q}`);
-      if (seq !== requestSeq.current) return;
-      setPatients(res.data.data);
-      setPagination(res.data.pagination);
-    } catch {
-      if (seq !== requestSeq.current) return;
-      setPatients([]);
-    } finally {
-      if (seq === requestSeq.current) setLoading(false);
-    }
-  }, [id, page, debouncedSearch, status]);
+    return q.toString();
+  }, [page, debouncedSearch, status]);
 
-  useEffect(() => {
-    fetchDoctor();
-  }, [fetchDoctor]);
-
-  useEffect(() => {
-    fetchRoster();
-  }, [fetchRoster]);
+  const doctorReq = useApi(`/doctors/${id}`, 'This doctor could not be loaded.');
+  const roster = useApi(`/doctors/${id}/patients?${rosterQuery}`, 'Patients could not be loaded.');
+  const doctor = doctorReq.data?.data || null;
+  const doctorError = doctorReq.error;
+  const patients = roster.data?.data || [];
+  const pagination = roster.data?.pagination || { total: 0, totalPages: 1 };
+  const loading = roster.loading;
+  const fetchDoctor = doctorReq.reload;
+  const fetchRoster = roster.reload;
 
   const refreshAll = () => {
     fetchDoctor();

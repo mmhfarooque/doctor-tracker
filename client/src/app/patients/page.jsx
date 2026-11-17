@@ -1,11 +1,12 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Plus, MoreHorizontal, Pencil, Trash2, Users, SlidersHorizontal } from 'lucide-react';
 import api from '../../lib/api';
 import useDebounce from '../../hooks/useDebounce';
+import useApi from '../../hooks/useApi';
 import PageHeader from '../../components/ui/PageHeader';
 import SearchInput from '../../components/ui/SearchInput';
 import FilterChips from '../../components/ui/FilterChips';
@@ -43,12 +44,6 @@ function PatientsView() {
   const [page, setPage] = useState(1);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
 
-  const [patients, setPatients] = useState([]);
-  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
-  const [doctors, setDoctors] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
   const [editing, setEditing] = useState(undefined); // undefined closed, null new, object edit
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -56,19 +51,8 @@ function PatientsView() {
 
   const debouncedSearch = useDebounce(search, 300);
   const debouncedCondition = useDebounce(condition, 300);
-  const requestSeq = useRef(0);
 
-  useEffect(() => {
-    api
-      .get('/doctors?limit=100&sortBy=name&order=asc')
-      .then((res) => setDoctors(res.data.data))
-      .catch(() => {});
-  }, []);
-
-  const fetchPatients = useCallback(async () => {
-    const seq = ++requestSeq.current;
-    setLoading(true);
-    setError('');
+  const query = useMemo(() => {
     const [sortBy, order] = sort.split(':');
     const q = new URLSearchParams({ page, limit: LIMIT, sortBy, order });
     if (debouncedSearch.trim()) q.set('search', debouncedSearch.trim());
@@ -77,22 +61,16 @@ function PatientsView() {
     if (doctor) q.set('doctor', doctor);
     if (startDate) q.set('startDate', startDate);
     if (endDate) q.set('endDate', endDate);
-    try {
-      const res = await api.get(`/patients?${q}`);
-      if (seq !== requestSeq.current) return;
-      setPatients(res.data.data);
-      setPagination(res.data.pagination);
-    } catch (err) {
-      if (seq !== requestSeq.current) return;
-      setError(apiError(err, 'Patients could not be loaded.'));
-    } finally {
-      if (seq === requestSeq.current) setLoading(false);
-    }
+    return q.toString();
   }, [page, debouncedSearch, debouncedCondition, status, doctor, startDate, endDate, sort]);
 
-  useEffect(() => {
-    fetchPatients();
-  }, [fetchPatients]);
+  const list = useApi(`/patients?${query}`, 'Patients could not be loaded.');
+  const doctorList = useApi('/doctors?limit=100&sortBy=name&order=asc');
+  const patients = list.data?.data || [];
+  const pagination = list.data?.pagination || { total: 0, totalPages: 1 };
+  const doctors = doctorList.data?.data || [];
+  const { loading, error } = list;
+  const fetchPatients = list.reload;
 
   const withReset = (setter) => (value) => {
     setter(value);

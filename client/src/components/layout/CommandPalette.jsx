@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Stethoscope, User, CornerDownLeft } from 'lucide-react';
 import api from '../../lib/api';
@@ -12,60 +12,47 @@ import Avatar from '../ui/Avatar';
  * jumps straight to the doctor's profile or the filtered patient list.
  */
 export default function CommandPalette({ open, onClose }) {
+  return open ? <Palette onClose={onClose} /> : null;
+}
+
+const toItems = (doctors, patients) => [
+  ...doctors.map((doc) => ({
+    key: 'd' + doc._id,
+    type: 'Doctor',
+    title: doc.name,
+    meta: `${doc.specialization}, ${doc.hospital}`,
+    href: `/doctors/${doc._id}`,
+  })),
+  ...patients.map((pat) => ({
+    key: 'p' + pat._id,
+    type: 'Patient',
+    title: pat.name,
+    meta: `${pat.condition}${pat.doctor?.name ? `, with ${pat.doctor.name}` : ''}`,
+    href: `/patients?search=${encodeURIComponent(pat.name)}`,
+  })),
+];
+
+// Mounted fresh each time the palette opens, so the query always starts empty
+function Palette({ onClose }) {
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
+  const [response, setResponse] = useState({ query: '', items: [] });
   const [active, setActive] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const debounced = useDebounce(query, 200);
-  const inputRef = useRef(null);
-  const seq = useRef(0);
+  const debounced = useDebounce(query, 200).trim();
 
   useEffect(() => {
-    if (open) {
-      setQuery('');
-      setResults([]);
-      setActive(0);
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
-  }, [open]);
+    if (!debounced) return undefined;
+    const controller = new AbortController();
+    const params = `search=${encodeURIComponent(debounced)}&limit=5`;
+    Promise.all([api.get(`/doctors?${params}`, { signal: controller.signal }), api.get(`/patients?${params}`, { signal: controller.signal })])
+      .then(([d, p]) => setResponse({ query: debounced, items: toItems(d.data.data, p.data.data) }))
+      .catch(() => !controller.signal.aborted && setResponse({ query: debounced, items: [] }));
+    return () => controller.abort();
+  }, [debounced]);
 
-  useEffect(() => {
-    if (!open) return;
-    const q = debounced.trim();
-    if (!q) {
-      setResults([]);
-      return;
-    }
-    const id = ++seq.current;
-    setLoading(true);
-    const params = `search=${encodeURIComponent(q)}&limit=5`;
-    Promise.all([api.get(`/doctors?${params}`), api.get(`/patients?${params}`)])
-      .then(([d, p]) => {
-        if (id !== seq.current) return;
-        setResults([
-          ...d.data.data.map((doc) => ({
-            key: 'd' + doc._id,
-            type: 'Doctor',
-            title: doc.name,
-            meta: `${doc.specialization} · ${doc.hospital}`,
-            href: `/doctors/${doc._id}`,
-          })),
-          ...p.data.data.map((pat) => ({
-            key: 'p' + pat._id,
-            type: 'Patient',
-            title: pat.name,
-            meta: `${pat.condition}${pat.doctor?.name ? ` · ${pat.doctor.name}` : ''}`,
-            href: `/patients?search=${encodeURIComponent(pat.name)}`,
-          })),
-        ]);
-        setActive(0);
-      })
-      .catch(() => id === seq.current && setResults([]))
-      .finally(() => id === seq.current && setLoading(false));
-  }, [debounced, open]);
-
-  if (!open) return null;
+  const results = debounced && response.query === debounced ? response.items : [];
+  const loading = Boolean(debounced) && response.query !== debounced;
+  const activeIndex = Math.min(active, Math.max(results.length - 1, 0));
 
   const go = (item) => {
     onClose();
@@ -75,12 +62,12 @@ export default function CommandPalette({ open, onClose }) {
   const onKeyDown = (e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActive((a) => Math.min(a + 1, results.length - 1));
+      setActive(Math.min(activeIndex + 1, results.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActive((a) => Math.max(a - 1, 0));
-    } else if (e.key === 'Enter' && results[active]) {
-      go(results[active]);
+      setActive(Math.max(activeIndex - 1, 0));
+    } else if (e.key === 'Enter' && results[activeIndex]) {
+      go(results[activeIndex]);
     } else if (e.key === 'Escape') {
       onClose();
     }
@@ -93,10 +80,13 @@ export default function CommandPalette({ open, onClose }) {
         <div className="flex items-center gap-3 border-b border-line px-4">
           <Search className="h-5 w-5 text-faint" />
           <input
-            ref={inputRef}
+            autoFocus
             value={query}
             maxLength={100}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActive(0);
+            }}
             onKeyDown={onKeyDown}
             placeholder="Search doctors and patients"
             className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-ink placeholder:text-faint focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -108,16 +98,16 @@ export default function CommandPalette({ open, onClose }) {
         </div>
         <ul id="palette-results" role="listbox" className="max-h-[50vh] overflow-y-auto p-2">
           {!query.trim() && <li className="px-3 py-6 text-center text-sm text-muted">Type a name, specialty, hospital or condition.</li>}
-          {query.trim() && !loading && results.length === 0 && debounced === query && (
-            <li className="px-3 py-6 text-center text-sm text-muted">No doctors or patients match “{query.trim()}”.</li>
+          {debounced && !loading && results.length === 0 && (
+            <li className="px-3 py-6 text-center text-sm text-muted">No doctors or patients match “{debounced}”.</li>
           )}
           {results.map((item, i) => (
-            <li key={item.key} role="option" aria-selected={i === active}>
+            <li key={item.key} role="option" aria-selected={i === activeIndex}>
               <button
                 type="button"
                 onMouseEnter={() => setActive(i)}
                 onClick={() => go(item)}
-                className={`flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left ${i === active ? 'bg-pine-50' : ''}`}
+                className={`flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left ${i === activeIndex ? 'bg-pine-50' : ''}`}
               >
                 <Avatar name={item.title} size="sm" />
                 <span className="min-w-0 flex-1">
@@ -128,7 +118,7 @@ export default function CommandPalette({ open, onClose }) {
                   {item.type === 'Doctor' ? <Stethoscope className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
                   {item.type}
                 </span>
-                {i === active && <CornerDownLeft className="h-3.5 w-3.5 text-pine-600" />}
+                {i === activeIndex && <CornerDownLeft className="h-3.5 w-3.5 text-pine-600" />}
               </button>
             </li>
           ))}

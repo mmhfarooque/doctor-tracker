@@ -1,14 +1,14 @@
 import Patient from '../models/Patient.js';
 import Doctor from '../models/Doctor.js';
 import { escapeRegex, sanitizeString, isValidEmail } from '../utils/sanitize.js';
-import { isValidObjectId, asString, parseBoundedInt, PATIENT_STATUSES, GENDERS } from '../utils/validators.js';
+import { isValidObjectId, isValidPhone, asString, parseBoundedInt, PATIENT_STATUSES, GENDERS } from '../utils/validators.js';
 
 // @desc    Get all patients with search, filters & pagination
 // @route   GET /api/patients
 // @access  Private
 export const getPatients = async (req, res, next) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const page = Math.min(10000, Math.max(1, parseInt(req.query.page, 10) || 1));
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
     const skip = (page - 1) * limit;
 
@@ -172,6 +172,10 @@ export const createPatient = async (req, res, next) => {
       });
     }
 
+    if (phone && !isValidPhone(phone)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid phone number' });
+    }
+
     let cleanEmail = '';
     if (email) {
       cleanEmail = email.toLowerCase().trim();
@@ -243,6 +247,10 @@ export const updatePatient = async (req, res, next) => {
           message: 'Assigned doctor not found',
         });
       }
+    }
+
+    if (typeof phone === 'string' && phone && !isValidPhone(phone)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid phone number' });
     }
 
     let cleanEmail = patient.email;

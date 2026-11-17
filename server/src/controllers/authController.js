@@ -91,10 +91,10 @@ export const register = async (req, res, next) => {
       });
     }
 
-    if (password.length < 6 || password.length > 128) {
+    if (password.length < 8 || password.length > 128 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be between 6 and 128 characters long',
+        message: 'Password must be 8–128 characters and include at least one letter and one number',
       });
     }
 

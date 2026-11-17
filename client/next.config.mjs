@@ -25,7 +25,8 @@ const csp = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  poweredByHeader: false, // Disables 'X-Powered-By: Next.js' header for fingerprint obfuscation
+  poweredByHeader: false,
+  devIndicators: false, // dev-only badge overlapped the sidebar account button // Disables 'X-Powered-By: Next.js' header for fingerprint obfuscation
   async headers() {
     return [
       {
@@ -47,6 +48,8 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
           },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          ...(isDev ? [] : [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' }]),
           {
             key: 'Content-Security-Policy',
             value: csp,

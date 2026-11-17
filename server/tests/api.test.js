@@ -81,7 +81,7 @@ let doctorId;
 let patientId;
 
 test('creates a doctor and rejects a duplicate email', async () => {
-  const doc = { name: 'Dr. Test', specialization: 'Cardiology', hospital: 'City', phone: '123', email: 'dr@example.com' };
+  const doc = { name: 'Dr. Test', specialization: 'Cardiology', hospital: 'City', phone: '+1 555 010 2030', email: 'dr@example.com' };
   const res = await api('POST', '/doctors', doc);
   assert.equal(res.status, 201);
   doctorId = res.body.data._id;
@@ -149,6 +149,25 @@ test('doctor filter options list distinct values', async () => {
   assert.equal(res.status, 200);
   assert.ok(Array.isArray(res.body.data.specializations));
   assert.ok(Array.isArray(res.body.data.hospitals));
+});
+
+test('rejects an invalid phone number', async () => {
+  const res = await api('POST', '/doctors', { name: 'Dr. X', specialization: 'x', hospital: 'y', phone: 'call me', email: 'x2@example.com' });
+  assert.equal(res.status, 400);
+});
+
+test('admins can create admins only with a strong password', async () => {
+  const weak = await api('POST', '/auth/register', { name: 'New Admin', email: 'new@example.com', password: 'short' });
+  assert.equal(weak.status, 400);
+  const ok = await api('POST', '/auth/register', { name: 'New Admin', email: 'new@example.com', password: 'Longer-pass-2026' });
+  assert.equal(ok.status, 201);
+  assert.equal(ok.body.data.password, undefined);
+});
+
+test('unknown routes return 404 without echoing the URL', async () => {
+  const res = await api('GET', '/nope?<script>');
+  assert.equal(res.status, 404);
+  assert.equal(res.body.message, 'API route not found');
 });
 
 test('invalid ObjectId returns 400', async () => {

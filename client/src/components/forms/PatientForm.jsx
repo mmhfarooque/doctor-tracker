@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Drawer from '../ui/Drawer';
 import Field from '../ui/Field';
 import api from '../../lib/api';
@@ -16,29 +16,30 @@ const today = () => new Date().toISOString().slice(0, 10);
  * - `fixedDoctor`   → admitting under a specific doctor (doctor picker hidden)
  * - `doctors`       → options for the attending doctor picker
  */
-export default function PatientForm({ open, patient, fixedDoctor, doctors = [], onClose, onSaved }) {
+export default function PatientForm({ open, ...props }) {
+  return open ? <PatientFormPanel {...props} /> : null;
+}
+
+const initialForm = (patient, fixedDoctor) => ({
+  name: patient?.name || '',
+  age: patient?.age ?? '',
+  gender: patient?.gender || '',
+  condition: patient?.condition || '',
+  status: patient?.status || 'Stable',
+  doctor: patient?.doctor?._id || patient?.doctor || fixedDoctor?._id || '',
+  admissionDate: patient ? toDateInput(patient.admissionDate) : today(),
+  phone: patient?.phone || '',
+  email: patient?.email || '',
+  notes: patient?.notes || '',
+});
+
+// Mounted fresh on every open, so state always starts from the given patient
+function PatientFormPanel({ patient, fixedDoctor, doctors = [], onClose, onSaved }) {
   const notify = useToast();
   const editing = Boolean(patient?._id);
-  const [form, setForm] = useState({});
+  const [form, setForm] = useState(() => initialForm(patient, fixedDoctor));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!open) return;
-    setError('');
-    setForm({
-      name: patient?.name || '',
-      age: patient?.age ?? '',
-      gender: patient?.gender || '',
-      condition: patient?.condition || '',
-      status: patient?.status || 'Stable',
-      doctor: patient?.doctor?._id || patient?.doctor || fixedDoctor?._id || '',
-      admissionDate: patient ? toDateInput(patient.admissionDate) : today(),
-      phone: patient?.phone || '',
-      email: patient?.email || '',
-      notes: patient?.notes || '',
-    });
-  }, [open, patient, fixedDoctor]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -63,7 +64,7 @@ export default function PatientForm({ open, patient, fixedDoctor, doctors = [], 
 
   return (
     <Drawer
-      open={open}
+      open
       onClose={onClose}
       title={editing ? 'Edit patient' : 'Admit patient'}
       description={editing ? patient.name : fixedDoctor ? `Under the care of ${fixedDoctor.name}` : 'Fields marked * are required.'}

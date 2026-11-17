@@ -11,12 +11,9 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function AppShell({ children }) {
   const pathname = usePathname();
-  const { user, loading } = useAuth();
-  const [mounted, setMounted] = useState(false);
+  const { user, hydrated } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-
-  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -33,7 +30,7 @@ export default function AppShell({ children }) {
 
   if (pathname === '/login') return <main className="min-h-screen">{children}</main>;
 
-  if (!mounted || loading || !user) {
+  if (!hydrated || !user) {
     return (
       <div className="flex h-screen items-center justify-center" role="status">
         <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-pine-200 border-t-pine-700" />

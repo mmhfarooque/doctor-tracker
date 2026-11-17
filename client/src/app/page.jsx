@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { UserPlus, Stethoscope, RefreshCw } from 'lucide-react';
-import api from '../lib/api';
+import useApi from '../hooks/useApi';
 import { useAuth } from '../context/AuthContext';
 import PageHeader from '../components/ui/PageHeader';
 import WardStatus from '../components/dashboard/WardStatus';
@@ -15,7 +15,7 @@ import Skeleton from '../components/ui/Skeleton';
 import DoctorForm from '../components/forms/DoctorForm';
 import PatientForm from '../components/forms/PatientForm';
 import { PATIENT_STATUSES, findStatus } from '../lib/constants';
-import { apiError, formatDate, greeting, monthLabel } from '../lib/format';
+import { formatDate, greeting, monthLabel } from '../lib/format';
 
 // The API only returns months that had admissions; fill the last 12 months so gaps show as zero.
 const lastTwelveMonths = (rows = []) => {
@@ -50,33 +50,17 @@ function Panel({ title, description, action, children, className = '' }) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [stats, setStats] = useState(null);
-  const [error, setError] = useState('');
   const [doctorFormOpen, setDoctorFormOpen] = useState(false);
   const [patientFormOpen, setPatientFormOpen] = useState(false);
-  const [doctorOptions, setDoctorOptions] = useState([]);
 
-  const load = useCallback(async () => {
-    setError('');
-    try {
-      const res = await api.get('/dashboard/stats');
-      setStats(res.data.data);
-    } catch (err) {
-      setError(apiError(err, 'Dashboard figures could not be loaded.'));
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const openAdmit = async () => {
-    setPatientFormOpen(true);
-    if (!doctorOptions.length) {
-      const res = await api.get('/doctors?limit=100&sortBy=name&order=asc').catch(() => null);
-      if (res) setDoctorOptions(res.data.data);
-    }
-  };
+  const statsReq = useApi('/dashboard/stats', 'Dashboard figures could not be loaded.');
+  // Doctor list for the admit form is only fetched once the form is opened
+  const doctorReq = useApi(patientFormOpen ? '/doctors?limit=100&sortBy=name&order=asc' : null);
+  const stats = statsReq.data?.data || null;
+  const { error } = statsReq;
+  const load = statsReq.reload;
+  const doctorOptions = doctorReq.data?.data || [];
+  const openAdmit = () => setPatientFormOpen(true);
 
   const series = useMemo(() => lastTwelveMonths(stats?.monthlyRegistrations), [stats]);
   const yearTotal = series.reduce((sum, m) => sum + m.admissions, 0);
