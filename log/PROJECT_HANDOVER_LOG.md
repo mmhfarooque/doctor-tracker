@@ -515,4 +515,17 @@ A comprehensive security audit was executed by OpenAI Codex covering all 7 criti
 
 ---
 
+## 17. State check & backups — 2026-11-17 (end of day)
+
+Written by Claude after the Gemini/Codex session (§15–§16), verified on the machine rather than copied from notes.
+
+* **Repo:** local `main` = GitHub `origin/main` = `3e9472c`. Working tree clean apart from one untracked file `docs/rural_bangladesh_sundown.jpg` (1.1 MB, added 23:07, not referenced yet — owner to decide whether it belongs in the repo).
+* **History was rewritten** during the "credit Mahmud Farooque" commits (≈22:20–22:30) and force-pushed: every commit hash changed. Hashes quoted in §15, §16 and `log/HANDOFF-2026-11-17-features.md` (`7581c9d`, `6c5acb6`, `a1db8ac`, `025df2e`) are pre-rewrite and no longer exist on GitHub. Authors are now `Mahmud Farooque` (27 commits) plus one commit `bf76d4b` authored as `Mfaruk <farooque@example.com>` (placeholder email — cosmetic).
+* **Re-verified after the rewrite:** no secrets anywhere in history (no credentialed Mongo URIs, no old JWT secret, no `resource/` or `.env` files ever committed); API tests **49/49 pass**.
+* **Live:** UI https://doctor-tracker-three-gamma.vercel.app · API https://doctor-tracker-api-tawny.vercel.app (both auto-deploy from `main`).
+* **Backups:** git (GitHub, public) + NAS snapshot `Backup/Doctor Tracker/repo-snapshots/` (tar.gz without `node_modules`/`.next`; includes `.env` files and `resource/` because the NAS is private — needed to restore).
+* **Still open for the owner:** change the Atlas DB password (it appeared in a chat screenshot) → update Vercel `MONGODB_URI` + local `server/.env`; enable Vercel 2FA; decide on the untracked image.
+
+---
+
 *This document serves as the single source of truth for the Doctor Tracker full-stack codebase. Any subsequent AI assistant or software engineer can read this file and have complete technical context.*

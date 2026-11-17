@@ -1,5 +1,8 @@
 # Handoff — "12 features" build (2026-11-17, late night)
 
+> **Note (added later):** the git history was rewritten at ~22:20–22:30 (author credits) and force-pushed, so the commit hashes in this file are pre-rewrite and no longer exist. Current state: `log/PROJECT_HANDOVER_LOG.md` §17.
+
+
 For the next agent (Gemini via Antigravity). Read this file first, then `log/PROJECT_HANDOVER_LOG.md` (§9–§14) and `README.md`.
 Repo root: `~/Projects/Doctor Tracker` · GitHub (public): https://github.com/mmhfarooque/doctor-tracker · Branch: `main`.
 
