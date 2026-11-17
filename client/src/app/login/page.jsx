@@ -8,7 +8,12 @@ import { PATIENT_STATUSES } from '../../lib/constants';
 
 // Demo credentials box is for reviewers; hide it on a real deployment with NEXT_PUBLIC_SHOW_DEMO_LOGIN=false
 const SHOW_DEMO_LOGIN = process.env.NEXT_PUBLIC_SHOW_DEMO_LOGIN !== 'false';
-const DEMO = { email: 'admin@doctortracker.com', password: 'Password123!' };
+const DEMO_PASSWORD = 'Password123!';
+const DEMO_ACCOUNTS = [
+  { role: 'Admin', email: 'admin@doctortracker.com', note: 'Full access' },
+  { role: 'Doctor', email: 'doctor@doctortracker.com', note: 'Dr. Sarah Jenkins — own patients only' },
+  { role: 'Nurse', email: 'nurse@doctortracker.com', note: 'Status, notes and follow-ups' },
+];
 
 // Decorative preview of the dashboard's status bar on the brand panel
 const PREVIEW = [3, 5, 5, 9, 1];
@@ -134,20 +139,28 @@ export default function LoginPage() {
           {SHOW_DEMO_LOGIN && (
             <div className="mt-8 rounded-panel border border-dashed border-line-strong p-4">
               <p className="text-sm font-medium text-ink">Reviewing the demo?</p>
-              <p className="mt-1 text-[13px] leading-relaxed text-muted">
-                Sign in as <span className="font-medium text-ink">{DEMO.email}</span> with password{' '}
-                <span className="font-medium text-ink">{DEMO.password}</span>
+              <p className="mt-1 text-[13px] text-muted">
+                Pick a role to fill in its login. Password for all: <span className="font-medium text-ink">{DEMO_PASSWORD}</span>
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setEmail(DEMO.email);
-                  setPassword(DEMO.password);
-                }}
-                className="btn btn-sm btn-secondary mt-3"
-              >
-                Fill in demo account
-              </button>
+              <div className="mt-3 space-y-2">
+                {DEMO_ACCOUNTS.map((a) => (
+                  <button
+                    key={a.role}
+                    type="button"
+                    onClick={() => {
+                      setEmail(a.email);
+                      setPassword(DEMO_PASSWORD);
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-control border border-line px-3 py-2 text-left hover:bg-canvas"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-ink">{a.role}</span>
+                      <span className="block truncate text-xs text-muted">{a.note}</span>
+                    </span>
+                    <span className="shrink-0 text-xs font-medium text-pine-700">Use</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

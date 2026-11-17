@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Plus, MoreHorizontal, UserPlus, Pencil, Eye, Stethoscope, SlidersHorizontal } from 'lucide-react';
 import useApi from '../../hooks/useApi';
 import useDebounce from '../../hooks/useDebounce';
@@ -19,6 +19,9 @@ import DoctorForm from '../../components/forms/DoctorForm';
 import PatientForm from '../../components/forms/PatientForm';
 import { DOCTOR_STATUSES, findStatus } from '../../lib/constants';
 import { formatDate } from '../../lib/format';
+import CapacityMeter from '../../components/ui/CapacityMeter';
+import { useAuth } from '../../context/AuthContext';
+import { can } from '../../lib/permissions';
 
 const LIMIT = 10;
 const SORTS = [
@@ -31,16 +34,18 @@ const SORTS = [
 function DoctorsView() {
   const router = useRouter();
   const params = useSearchParams();
+  const pathname = usePathname();
+  const { user } = useAuth();
 
   const [search, setSearch] = useState(params.get('search') || '');
   const [specialization, setSpecialization] = useState(params.get('specialization') || '');
-  const [hospital, setHospital] = useState('');
-  const [status, setStatus] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [sort, setSort] = useState(SORTS[0].value);
-  const [page, setPage] = useState(1);
-  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [hospital, setHospital] = useState(params.get('hospital') || '');
+  const [status, setStatus] = useState(params.get('status') || '');
+  const [startDate, setStartDate] = useState(params.get('from') || '');
+  const [endDate, setEndDate] = useState(params.get('to') || '');
+  const [sort, setSort] = useState(params.get('sort') || SORTS[0].value);
+  const [page, setPage] = useState(Number(params.get('page')) || 1);
+  const [showMoreFilters, setShowMoreFilters] = useState(Boolean(params.get('hospital') || params.get('from') || params.get('to')));
 
   const [editing, setEditing] = useState(undefined); // undefined = closed, null = new, object = edit
   const [admitFor, setAdmitFor] = useState(null);
@@ -93,10 +98,26 @@ function DoctorsView() {
     setPage(1);
   };
 
+  // Filters live in the address bar so a filtered list can be bookmarked or shared
+  useEffect(() => {
+    const q = new URLSearchParams();
+    if (debouncedSearch.trim()) q.set('search', debouncedSearch.trim());
+    if (specialization) q.set('specialization', specialization);
+    if (hospital) q.set('hospital', hospital);
+    if (status) q.set('status', status);
+    if (startDate) q.set('from', startDate);
+    if (endDate) q.set('to', endDate);
+    if (sort !== SORTS[0].value) q.set('sort', sort);
+    if (page > 1) q.set('page', page);
+    const next = q.toString();
+    if (next !== window.location.search.replace(/^\?/, '')) router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+  }, [debouncedSearch, specialization, hospital, status, startDate, endDate, sort, page, pathname, router]);
+
+  const canAdmitFor = (doc) => can(user, 'patient.create') && (user.role === 'admin' || String(user.doctor?._id || user.doctor) === doc._id);
   const rowMenu = (doc) => [
     { key: 'view', label: 'View profile', icon: Eye, onClick: () => router.push(`/doctors/${doc._id}`) },
-    { key: 'admit', label: 'Admit a patient', icon: UserPlus, onClick: () => setAdmitFor(doc) },
-    { key: 'edit', label: 'Edit details', icon: Pencil, onClick: () => setEditing(doc) },
+    ...(canAdmitFor(doc) ? [{ key: 'admit', label: 'Admit a patient', icon: UserPlus, onClick: () => setAdmitFor(doc) }] : []),
+    ...(can(user, 'doctor.manage') ? [{ key: 'edit', label: 'Edit details', icon: Pencil, onClick: () => setEditing(doc) }] : []),
   ];
 
   return (
@@ -105,10 +126,12 @@ function DoctorsView() {
         title="Doctors"
         description="Find a doctor, check their caseload, and admit patients under their care."
         actions={
-          <button className="btn btn-primary" onClick={() => setEditing(null)}>
-            <Plus className="h-4 w-4" />
-            Add doctor
-          </button>
+          can(user, 'doctor.manage') && (
+            <button className="btn btn-primary" onClick={() => setEditing(null)}>
+              <Plus className="h-4 w-4" />
+              Add doctor
+            </button>
+          )
         }
       />
 
@@ -216,18 +239,18 @@ function DoctorsView() {
                   <button className="btn btn-secondary" onClick={clearAll}>
                     Clear filters
                   </button>
-                ) : (
+                ) : can(user, 'doctor.manage') ? (
                   <button className="btn btn-primary" onClick={() => setEditing(null)}>
                     <Plus className="h-4 w-4" />
                     Add doctor
                   </button>
-                )
+                ) : null
               }
             />
           ) : (
             <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
               {/* Desktop table */}
-              <div className="hidden overflow-x-auto md:block">
+              <div className="relative hidden overflow-x-auto md:block">
                 <table className="w-full">
                   <thead className="table-head">
                     <tr>
@@ -236,9 +259,7 @@ function DoctorsView() {
                       <th scope="col" className="hidden xl:table-cell">
                         Hospital
                       </th>
-                      <th scope="col" className="text-right">
-                        Patients
-                      </th>
+                      <th scope="col">Caseload</th>
                       <th scope="col">Availability</th>
                       <th scope="col">
                         <span className="sr-only">Actions</span>
@@ -272,7 +293,9 @@ function DoctorsView() {
                           <span className="num block text-[13px] text-muted">{doc.experienceYears} yrs experience</span>
                         </td>
                         <td className="hidden max-w-[220px] truncate text-ink-soft xl:table-cell">{doc.hospital}</td>
-                        <td className="num text-right font-medium text-ink">{doc.patientCount}</td>
+                        <td className="w-36">
+                          <CapacityMeter count={doc.patientCount} max={doc.maxPatients} />
+                        </td>
                         <td>
                           <StatusBadge status={findStatus(DOCTOR_STATUSES, doc.status)} />
                         </td>
@@ -311,9 +334,7 @@ function DoctorsView() {
                         </span>
                         <span className="mt-2 flex flex-wrap items-center gap-2">
                           <StatusBadge status={findStatus(DOCTOR_STATUSES, doc.status)} size="sm" />
-                          <span className="num text-xs text-muted">
-                            {doc.patientCount} patient{doc.patientCount === 1 ? '' : 's'}
-                          </span>
+                          <CapacityMeter count={doc.patientCount} max={doc.maxPatients} className="w-28" />
                         </span>
                       </span>
                     </Link>
@@ -342,7 +363,7 @@ function DoctorsView() {
       </div>
 
       <DoctorForm
-        open={editing !== undefined}
+        open={editing !== undefined && can(user, 'doctor.manage')}
         doctor={editing || null}
         onClose={() => setEditing(undefined)}
         onSaved={() => {

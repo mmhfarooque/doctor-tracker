@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Stethoscope, Users, Search, LogOut, ChevronsUpDown, X } from 'lucide-react';
+import { LayoutDashboard, Stethoscope, Users, Search, LogOut, ChevronsUpDown, X, CalendarDays, ShieldCheck } from 'lucide-react';
+import AlertsBell from '../activity/AlertsBell';
+import { ROLE_LABELS, can } from '../../lib/permissions';
 import Logo from './Logo';
 import Avatar from '../ui/Avatar';
 import Menu from '../ui/Menu';
@@ -10,8 +12,10 @@ import { useAuth } from '../../context/AuthContext';
 
 const NAV = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/doctors', label: 'Doctors', icon: Stethoscope },
   { href: '/patients', label: 'Patients', icon: Users },
+  { href: '/doctors', label: 'Doctors', icon: Stethoscope },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays },
+  { href: '/team', label: 'Team & access', icon: ShieldCheck, permission: 'team.manage' },
 ];
 
 export default function Sidebar({ open, onClose, onOpenSearch }) {
@@ -32,6 +36,9 @@ export default function Sidebar({ open, onClose, onOpenSearch }) {
           <Link href="/" onClick={onClose} aria-label="Doctor Tracker home">
             <Logo inverted />
           </Link>
+          <div className="hidden lg:block">
+            <AlertsBell tone="dark" />
+          </div>
           <button className="icon-btn text-[#C6D3CE] hover:bg-white/10 hover:text-white lg:hidden" onClick={onClose} aria-label="Close menu">
             <X className="h-5 w-5" />
           </button>
@@ -50,7 +57,7 @@ export default function Sidebar({ open, onClose, onOpenSearch }) {
         </div>
 
         <nav className="mt-3 flex-1 space-y-0.5 px-3">
-          {NAV.map(({ href, label, icon: Icon }) => {
+          {NAV.filter((n) => !n.permission || can(user, n.permission)).map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             return (
               <Link
@@ -98,7 +105,7 @@ export default function Sidebar({ open, onClose, onOpenSearch }) {
                 <Avatar name={user?.name || ''} size="sm" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-white">{user?.name}</span>
-                  <span className="block truncate text-xs text-[#93A69F]">Administrator</span>
+                  <span className="block truncate text-xs text-[#93A69F]">{ROLE_LABELS[user?.role] || 'Staff'}</span>
                 </span>
                 <ChevronsUpDown className="h-4 w-4 text-[#93A69F]" />
               </button>

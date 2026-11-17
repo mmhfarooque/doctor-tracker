@@ -9,7 +9,7 @@ import { DOCTOR_STATUSES } from '../../lib/constants';
 import { apiError } from '../../lib/format';
 import { useToast } from '../ui/Toast';
 
-const EMPTY = { name: '', specialization: '', hospital: '', phone: '', email: '', status: 'Active', experienceYears: '', bio: '' };
+const EMPTY = { name: '', specialization: '', hospital: '', phone: '', email: '', status: 'Active', experienceYears: '', maxPatients: 10, bio: '' };
 
 const fromDoctor = (doctor) =>
   doctor
@@ -21,6 +21,7 @@ const fromDoctor = (doctor) =>
         email: doctor.email || '',
         status: doctor.status || 'Active',
         experienceYears: doctor.experienceYears ?? '',
+        maxPatients: doctor.maxPatients ?? 10,
         bio: doctor.bio || '',
       }
     : EMPTY;
@@ -48,7 +49,11 @@ function DoctorFormPanel({ doctor, onClose, onSaved }) {
     setSaving(true);
     setError('');
     try {
-      const payload = { ...form, experienceYears: form.experienceYears === '' ? undefined : form.experienceYears };
+      const payload = {
+        ...form,
+        experienceYears: form.experienceYears === '' ? undefined : form.experienceYears,
+        maxPatients: form.maxPatients === '' ? undefined : form.maxPatients,
+      };
       const res = editing ? await api.put(`/doctors/${doctor._id}`, payload) : await api.post('/doctors', payload);
       notify(editing ? 'Doctor details saved' : `${res.data.data.name} added`);
       onSaved(res.data.data);
@@ -110,6 +115,9 @@ function DoctorFormPanel({ doctor, onClose, onSaved }) {
             onChange={set('experienceYears')}
             placeholder="8"
           />
+        </Field>
+        <Field id="d-cap" label="Maximum active patients" className="col-span-2" hint="Flagged on the dashboard when reached.">
+          <input id="d-cap" className="input num" type="number" min={1} max={200} value={form.maxPatients} onChange={set('maxPatients')} />
         </Field>
         <Field id="d-hosp" label="Hospital" required className="col-span-2">
           <input

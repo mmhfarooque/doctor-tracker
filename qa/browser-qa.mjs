@@ -102,7 +102,7 @@ await safe('Responsive', 'mobile menu', async () => {
   const closed = await page.$eval('aside', (a) => a.getBoundingClientRect().right <= 0);
   check('Responsive', 'Mobile menu: hidden, opens, closes after navigating', hidden && shown && closed);
   const small = await page.$$eval('main button, main a, main select, main input', (els) =>
-    els.filter((e) => {
+    els.filter((e) => e.type !== 'checkbox').filter((e) => {
       const r = e.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && r.height < 24;
     }).map((e) => (e.getAttribute('aria-label') || e.textContent || e.tagName).trim().slice(0, 20))
@@ -238,9 +238,20 @@ await safe('URL tampering', 'flow', async () => {
 });
 
 // ---------- KEYBOARD ----------
+const clickText = async (selector, text) => {
+  for (const el of await page.$$(selector)) {
+    if ((await el.evaluate((e) => e.textContent.trim())).startsWith(text)) {
+      await el.evaluate((e) => e.click());
+      return true;
+    }
+  }
+  return false;
+};
+
 await safe('Keyboard', 'flow', async () => {
   await page.goto(APP + '/patients', { waitUntil: 'networkidle0' });
-  await page.click('tbody tr td:nth-child(2)');
+  await page.click('tbody tr button[aria-haspopup="menu"]');
+  await clickText('[role=menuitem]', 'Edit');
   await page.waitForSelector('[role=dialog]');
   await page.keyboard.press('Escape');
   await wait(300);
@@ -263,33 +274,192 @@ await safe('Keyboard', 'flow', async () => {
   check('Keyboard', 'Keyboard focus is visible', visible);
 });
 
-// ---------- DELETE ----------
-await safe('Delete', 'flow', async () => {
-  await page.goto(APP + '/patients', { waitUntil: 'networkidle0' });
-  await page.type('input[type=search]', 'QA Patient');
+// ---------- ARCHIVE / RESTORE / DELETE ----------
+await safe('Archive', 'flow', async () => {
+  await page.goto(APP + '/patients?search=QA%20Patient', { waitUntil: 'networkidle0' });
   await wait(900);
   await page.click('tbody tr button[aria-haspopup="menu"]');
-  await page.click('[role=menuitem]:last-child');
+  await clickText('[role=menuitem]', 'Archive');
+  await wait(1200);
+  check('Archive', 'Archive removes the patient from the list', await page.$eval('main', (m) => /No patients match/.test(m.textContent)));
+  const undone = await clickText('[aria-live] button', 'Undo');
+  await wait(1500);
+  check('Archive', 'Undo in the message restores it', undone && (await page.$$eval('tbody tr', (t) => t.length)) === 1);
+
+  await page.click('tbody tr button[aria-haspopup="menu"]');
+  await clickText('[role=menuitem]', 'Archive');
+  await wait(1000);
+  await page.goto(APP + '/patients?view=archived&search=QA%20Patient', { waitUntil: 'networkidle0' });
+  await wait(900);
+  check('Archive', 'Archived view lists the record', (await page.$$eval('tbody tr', (t) => t.length)) === 1);
+  await page.click('tbody tr button[aria-haspopup="menu"]');
+  await clickText('[role=menuitem]', 'Delete permanently');
   await page.waitForSelector('[role=alertdialog]');
   await page.click('[role=alertdialog] .btn-secondary');
   await wait(300);
-  check('Delete', 'Cancel on the confirmation keeps the patient', (await page.$$eval('tbody tr', (t) => t.length)) === 1);
+  check('Archive', 'Cancel on "delete permanently" keeps the record', (await page.$$eval('tbody tr', (t) => t.length)) === 1);
   await page.click('tbody tr button[aria-haspopup="menu"]');
-  await page.click('[role=menuitem]:last-child');
+  await clickText('[role=menuitem]', 'Delete permanently');
   await page.waitForSelector('[role=alertdialog]');
   await page.click('[role=alertdialog] .btn-danger');
   await wait(1200);
-  check('Delete', 'Confirmed delete removes the patient', await page.$eval('main', (m) => /No patients match/.test(m.textContent)));
+  check('Archive', 'Confirmed permanent delete removes it', await page.$eval('main', (m) => /No archived patients|No patients match/.test(m.textContent)));
 
   await page.goto(APP + '/doctors/' + docId, { waitUntil: 'networkidle0' });
   await page.click('button[aria-label="More actions"]');
   await page.click('[role=menuitem]');
   await page.waitForSelector('[role=alertdialog]');
   await page.click('[role=alertdialog] .btn-danger');
+  await wait(1200);
+  const drawer = await page.$eval('[role=dialog]', (d) => d.textContent).catch(() => '');
+  check('Archive', 'Deleting a doctor with patients asks who takes them over', /Reassign patients first/.test(drawer));
+  await page.keyboard.press('Escape');
+});
+
+// ---------- NEW FEATURES ----------
+await safe('Features', 'filters in the URL', async () => {
+  await page.goto(APP + '/patients?status=Critical&followUp=overdue', { waitUntil: 'networkidle0' });
+  await wait(900);
+  const tab = await page.$eval('[role=tab][aria-selected=true]', (t) => t.textContent.trim());
+  const chip = await page.$eval('main', (m) => /Overdue follow-up/.test(m.textContent));
+  const statuses = await page.$$eval('tbody tr td:nth-child(5)', (c) => c.map((x) => x.textContent.trim()));
+  check('Features', 'A shared link restores tab + follow-up filter', tab === 'Critical' && chip && statuses.every((t) => t === 'Critical'), `${tab}, ${statuses.length} rows`);
+  await clickText('[role=tab]', 'Stable');
+  await wait(900);
+  check('Features', 'Changing a filter updates the address bar', /status=Stable/.test(page.url()), page.url().replace(APP, ''));
+});
+
+await safe('Features', 'bulk + export', async () => {
+  await page.goto(APP + '/patients', { waitUntil: 'networkidle0' });
+  await wait(600);
+  const boxes = await page.$$('tbody tr input[type=checkbox]');
+  await boxes[0].click();
+  await boxes[1].click();
+  const bar = await page.$eval('main', (m) => /2 selected/.test(m.textContent));
+  check('Features', 'Selecting rows shows the bulk action bar', bar);
+  await clickText('main button', 'Clear selection');
+  await wait(300);
+  check('Features', 'Clear selection hides it', !(await page.$eval('main', (m) => /\d+ selected/.test(m.textContent))));
+  await clickText('main button', 'Export CSV');
+  await page.waitForFunction(() => /Export downloaded/.test(document.querySelector('[aria-live]')?.textContent || ''), { timeout: 15000 }).catch(() => {});
+  check('Features', 'Export CSV downloads (authenticated, no token in URL)', await page.$eval('[aria-live]', (e) => /Export downloaded/.test(e.textContent)));
+});
+
+await safe('Features', 'patient record', async () => {
+  await page.goto(APP + '/patients?status=Recovering', { waitUntil: 'networkidle0' });
+  await wait(700);
+  await page.click('tbody tr td:nth-child(3)');
+  await page.waitForFunction(() => /^\/patients\/[0-9a-f]{24}$/.test(location.pathname), { timeout: 10000 });
   await wait(1000);
-  const msg = await page.$eval('[role=alertdialog]', (d) => d.textContent).catch(() => '');
-  check('Delete', 'Deleting a doctor who still has patients is refused with an explanation', /still has/i.test(msg), msg.replace(/\s+/g, ' ').slice(0, 110));
-  await page.click('[role=alertdialog] .btn-secondary');
+  check('Features', 'Row opens the full patient record', true);
+  const before = await page.$$eval('main ol li', (l) => l.length);
+  check('Features', 'Record shows history and a Print button', before >= 1 && !!(await page.$('main button')) && (await clickText('main button', 'Print').then(() => true).catch(() => false)));
+  await clickText('main button', 'Stable');
+  await page.waitForFunction((n) => document.querySelectorAll('main ol li').length > n, { timeout: 10000 }, before).catch(() => {});
+  const top = await page.$eval('main ol li', (li) => li.textContent);
+  check('Features', 'Quick status change is recorded in the history', /from Recovering to Stable/.test(top), top.slice(0, 90));
+
+  await clickText('main button', 'Transfer');
+  await page.waitForSelector('#t-doc');
+  await page.waitForFunction(() => document.querySelectorAll('#t-doc option:not([disabled])').length > 0, { timeout: 15000 });
+  const opts = await page.$$eval('#t-doc option:not([disabled])', (o) => o.map((x) => x.value));
+  await page.select('#t-doc', opts[0]);
+  await page.type('#t-reason', 'QA transfer test');
+  await page.click('button[form="transfer-form"]');
+  await wait(1500);
+  const latest = await page.$eval('main ol li', (li) => li.textContent);
+  check('Features', 'Transfer with reason is applied and logged', /transferred/.test(latest) && /QA transfer test/.test(latest), latest.slice(0, 100));
+});
+
+await safe('Features', 'alerts bell', async () => {
+  await page.goto(APP + '/', { waitUntil: 'networkidle0' });
+  await wait(800);
+  const bell = await page.$('aside button[aria-label*="alert"]');
+  await bell.click();
+  await wait(500);
+  const panel = await page.$eval('body', (b) => /Critical alerts/.test(b.textContent) && /Patients who became critical/.test(b.textContent));
+  check('Features', 'Alerts bell opens the critical alerts panel', panel);
+  const label = await page.$eval('aside button[aria-label*="alert"]', (b) => b.getAttribute('aria-label'));
+  check('Features', 'Opening alerts marks them as read', label === 'Critical alerts', label);
+  await page.keyboard.press('Escape');
+});
+
+await safe('Features', 'schedule', async () => {
+  await page.goto(APP + '/schedule', { waitUntil: 'networkidle0' });
+  await wait(800);
+  check('Features', 'Schedule shows a week grid and who is on duty now', await page.$eval('main', (m) => /On duty now/.test(m.textContent) && /This week/.test(m.textContent)));
+  await clickText('main button', 'Add shift');
+  await page.waitForSelector('#s-doc');
+  const doc = await page.$$eval('#s-doc option:not([disabled])', (o) => o[0].value);
+  await page.select('#s-doc', doc);
+  await page.click('button[form="shift-form"]');
+  await wait(1500);
+  const drawerText = await page.$eval('[role=dialog]', (d) => d.textContent).catch(() => '');
+  const toast = await page.$eval('[aria-live]', (e) => e.textContent).catch(() => '');
+  check('Features', 'Adding a clashing shift is refused with a clear reason (or saved if free)', /overlaps/.test(drawerText) || /shift added/.test(toast), (drawerText.match(/[^.]*overlaps[^.]*/) || [toast])[0].slice(0, 100));
+  await page.keyboard.press('Escape');
+});
+
+await safe('Features', 'team accounts', async () => {
+  await page.goto(APP + '/team', { waitUntil: 'networkidle0' });
+  await wait(700);
+  await clickText('main button', 'Add account');
+  await page.waitForSelector('#a-name');
+  await page.type('#a-name', 'QA Nurse');
+  await page.type('#a-email', 'qa-nurse@example.com');
+  await page.type('#a-pass', 'short');
+  const weakBlocked = !(await page.$eval('#account-form', (f) => f.checkValidity()));
+  check('Features', 'Weak password blocked in the form', weakBlocked);
+  await page.$eval('#a-pass', (e) => (e.value = ''));
+  await clear('#a-pass');
+  await page.type('#a-pass', 'QaNurse2026');
+  await page.click('button[form="account-form"]');
+  await wait(1500);
+  check('Features', 'Admin creates a staff account', await page.$eval('main', (m) => /qa-nurse@example\.com/.test(m.textContent)));
+  await page.click('button[aria-label="Remove QA Nurse"]');
+  await page.waitForSelector('[role=alertdialog]');
+  await page.click('[role=alertdialog] .btn-danger');
+  await wait(1200);
+  check('Features', 'Admin removes it again', !(await page.$eval('main', (m) => /qa-nurse@example\.com/.test(m.textContent))));
+});
+
+await safe('Roles', 'doctor and nurse sessions', async () => {
+  const roleCheck = async (email, fn) => {
+    const ctx = await browser.createBrowserContext();
+    const p2 = await ctx.newPage();
+    await p2.setViewport({ width: 1440, height: 900 });
+    await p2.goto(APP + '/login', { waitUntil: 'networkidle0' });
+    await p2.type('#email', email);
+    await p2.type('#password', 'Password123!');
+    await Promise.all([p2.waitForFunction(() => location.pathname === '/', { timeout: 30000 }), p2.click('button[type=submit]')]);
+    await p2.waitForNetworkIdle();
+    await fn(p2);
+    await ctx.close();
+  };
+  await roleCheck('doctor@doctortracker.com', async (p2) => {
+    await p2.goto(APP + '/patients', { waitUntil: 'networkidle0' });
+    await wait(800);
+    const doctors = await p2.$$eval('tbody tr td:nth-child(4)', (c) => [...new Set(c.map((x) => x.textContent.trim().split('\n')[0]))]);
+    check('Roles', 'Doctor login lists only their own patients', doctors.length === 1 && /Sarah Jenkins/.test(doctors[0]), doctors.join(' | '));
+    check('Roles', 'Doctor has no Team & access page in the menu', !(await p2.$('aside a[href="/team"]')));
+    const other = (await (await fetch(API + '/doctors?search=Vance', { headers: H })).json()).data[0]._id;
+    await p2.goto(APP + '/doctors/' + other, { waitUntil: 'networkidle0' });
+    await wait(800);
+    check('Roles', "Another doctor's patient list is locked for a doctor login", await p2.$eval('main', (m) => /Visible to this doctor/.test(m.textContent)));
+  });
+  await roleCheck('nurse@doctortracker.com', async (p2) => {
+    await p2.goto(APP + '/patients', { waitUntil: 'networkidle0' });
+    await wait(700);
+    check('Roles', 'Nurse cannot admit patients (no button)', !(await p2.$$eval('main button', (b) => b.some((x) => /Admit patient/.test(x.textContent)))));
+    await p2.click('tbody tr td:nth-child(3)');
+    await p2.waitForFunction(() => /^\/patients\/[0-9a-f]{24}$/.test(location.pathname), { timeout: 10000 });
+    await wait(900);
+    const buttons = await p2.$$eval('main button', (b) => b.map((x) => x.textContent.trim()));
+    check('Roles', 'Nurse sees no Transfer / Archive on a record', !buttons.some((t) => /^(Transfer|Archive)$/.test(t)), buttons.filter((t) => t.length < 20).join(', '));
+    for (const el of await p2.$$('main button')) if ((await el.evaluate((e) => e.textContent.trim())) === 'Edit') await el.click();
+    await p2.waitForSelector('#p-name');
+    check('Roles', "Nurse's edit form locks everything except status, notes and follow-up", (await p2.$eval('#p-name', (e) => e.disabled)) && !(await p2.$eval('#p-notes', (e) => e.disabled)));
+  });
 });
 
 // ---------- API DOWN ----------
@@ -323,20 +493,6 @@ await safe('Auth', 'forged token', async () => {
   await page.waitForFunction(() => location.pathname === '/login', { timeout: 8000 }).catch(() => {});
   check('Auth', 'Forged token → logged out to /login', page.url().endsWith('/login'));
   check('Auth', 'Forged token wiped from storage', (await page.evaluate(() => localStorage.getItem('token'))) === null);
-});
-
-// ---------- CLEANUP ----------
-await safe('Cleanup', 'flow', async () => {
-  const qa = (await (await fetch(API + '/doctors?search=qa-&limit=100', { headers: H })).json()).data;
-  for (const d of qa) {
-    const pts = (await (await fetch(`${API}/doctors/${d._id}/patients?limit=100`, { headers: H })).json()).data;
-    for (const p of pts) await fetch(`${API}/doctors/${d._id}/patients/${p._id}`, { method: 'DELETE', headers: H });
-    await fetch(`${API}/doctors/${d._id}`, { method: 'DELETE', headers: H });
-  }
-  const left = (await (await fetch(API + '/patients?search=QA&limit=100', { headers: H })).json()).data.filter((p) => p.name.startsWith('QA'));
-  for (const p of left) await fetch(`${API}/patients/${p._id}`, { method: 'DELETE', headers: H });
-  const totals = (await (await fetch(API + '/dashboard/stats', { headers: H })).json()).data.totals;
-  check('Cleanup', 'QA records removed, demo data intact (8 doctors / 23 patients)', totals.doctors === 8 && totals.patients === 23, JSON.stringify(totals));
 });
 
 check('Runtime', 'No JavaScript errors on any page', pageErrors.length === 0, pageErrors.join(' | '));

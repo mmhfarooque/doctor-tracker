@@ -7,6 +7,7 @@ import api from '../../lib/api';
 import { GENDERS, PATIENT_STATUSES } from '../../lib/constants';
 import { apiError, toDateInput } from '../../lib/format';
 import { useToast } from '../ui/Toast';
+import { useAuth } from '../../context/AuthContext';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -31,12 +32,18 @@ const initialForm = (patient, fixedDoctor) => ({
   phone: patient?.phone || '',
   email: patient?.email || '',
   notes: patient?.notes || '',
+  followUpDate: toDateInput(patient?.followUpDate),
 });
 
 // Mounted fresh on every open, so state always starts from the given patient
 function PatientFormPanel({ patient, fixedDoctor, doctors = [], onClose, onSaved }) {
   const notify = useToast();
+  const { user } = useAuth();
   const editing = Boolean(patient?._id);
+  // Nurses may only change status, notes and follow-up on existing records
+  const locked = editing && user?.role === 'nurse';
+  // Only admins pick (or change) the attending doctor here; doctors admit under themselves, others use Transfer
+  const showDoctorPicker = !fixedDoctor && user?.role === 'admin';
   const [form, setForm] = useState(() => initialForm(patient, fixedDoctor));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -49,7 +56,8 @@ function PatientFormPanel({ patient, fixedDoctor, doctors = [], onClose, onSaved
     setError('');
     try {
       let res;
-      if (editing) res = await api.put(`/patients/${patient._id}`, form);
+      if (editing)
+        res = await api.put(`/patients/${patient._id}`, locked ? { status: form.status, notes: form.notes, followUpDate: form.followUpDate } : form);
       else if (fixedDoctor) res = await api.post(`/doctors/${fixedDoctor._id}/patients`, form);
       else res = await api.post('/patients', form);
       notify(editing ? 'Patient record saved' : `${form.name} admitted`);
@@ -82,11 +90,21 @@ function PatientFormPanel({ patient, fixedDoctor, doctors = [], onClose, onSaved
       <form id="patient-form" onSubmit={submit} className="grid grid-cols-2 gap-x-4 gap-y-5">
         {error && <p className="col-span-2 rounded-control bg-critical-soft px-3 py-2.5 text-sm text-critical">{error}</p>}
         <Field id="p-name" label="Full name" required className="col-span-2">
-          <input id="p-name" className="input" required maxLength={100} value={form.name || ''} onChange={set('name')} placeholder="Jane Roe" />
+          <input
+            id="p-name"
+            disabled={locked}
+            className="input"
+            required
+            maxLength={100}
+            value={form.name || ''}
+            onChange={set('name')}
+            placeholder="Jane Roe"
+          />
         </Field>
         <Field id="p-age" label="Age" required>
           <input
             id="p-age"
+            disabled={locked}
             className="input num"
             type="number"
             required
@@ -98,7 +116,7 @@ function PatientFormPanel({ patient, fixedDoctor, doctors = [], onClose, onSaved
           />
         </Field>
         <Field id="p-gender" label="Gender" required>
-          <select id="p-gender" className="select" required value={form.gender || ''} onChange={set('gender')}>
+          <select id="p-gender" disabled={locked} className="select" required value={form.gender || ''} onChange={set('gender')}>
             <option value="" disabled>
               Select
             </option>
@@ -110,6 +128,7 @@ function PatientFormPanel({ patient, fixedDoctor, doctors = [], onClose, onSaved
         <Field id="p-cond" label="Condition or diagnosis" required className="col-span-2">
           <input
             id="p-cond"
+            disabled={locked}
             className="input"
             required
             maxLength={150}
@@ -135,7 +154,7 @@ function PatientFormPanel({ patient, fixedDoctor, doctors = [], onClose, onSaved
             ))}
           </div>
         </fieldset>
-        {!fixedDoctor && (
+        {showDoctorPicker && (
           <Field id="p-doc" label="Attending doctor" required className="col-span-2">
             <select id="p-doc" className="select" required value={form.doctor || ''} onChange={set('doctor')}>
               <option value="" disabled>
@@ -150,13 +169,16 @@ function PatientFormPanel({ patient, fixedDoctor, doctors = [], onClose, onSaved
           </Field>
         )}
         <Field id="p-date" label="Admission date" className="col-span-2 sm:col-span-1">
-          <input id="p-date" className="input num" type="date" value={form.admissionDate || ''} onChange={set('admissionDate')} />
+          <input id="p-date" disabled={locked} className="input num" type="date" value={form.admissionDate || ''} onChange={set('admissionDate')} />
+        </Field>
+        <Field id="p-follow" label="Next follow-up" className="col-span-2 sm:col-span-1" hint="Shows on the dashboard when due.">
+          <input id="p-follow" className="input num" type="date" value={form.followUpDate || ''} onChange={set('followUpDate')} />
         </Field>
         <Field id="p-phone" label="Phone" className="col-span-2 sm:col-span-1">
-          <input id="p-phone" className="input" type="tel" maxLength={30} value={form.phone || ''} onChange={set('phone')} />
+          <input id="p-phone" disabled={locked} className="input" type="tel" maxLength={30} value={form.phone || ''} onChange={set('phone')} />
         </Field>
         <Field id="p-email" label="Email" className="col-span-2">
-          <input id="p-email" className="input" type="email" maxLength={100} value={form.email || ''} onChange={set('email')} />
+          <input id="p-email" disabled={locked} className="input" type="email" maxLength={100} value={form.email || ''} onChange={set('email')} />
         </Field>
         <Field id="p-notes" label="Clinical notes" className="col-span-2">
           <textarea id="p-notes" className="input" rows={4} maxLength={2000} value={form.notes || ''} onChange={set('notes')} />

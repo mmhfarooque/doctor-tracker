@@ -167,7 +167,7 @@ const seedDB = async () => {
     const [admin, doctorUser, nurse] = await User.create([
       { name: 'System Admin', email: 'admin@doctortracker.com', password: PASSWORD, role: 'admin' },
       { name: 'Dr. Sarah Jenkins', email: 'doctor@doctortracker.com', password: PASSWORD, role: 'doctor', doctor: bySpecialty.Cardiology._id },
-      { name: 'Nina Patel (Nurse)', email: 'nurse@doctortracker.com', password: PASSWORD, role: 'nurse' },
+      { name: 'Nina Patel', email: 'nurse@doctortracker.com', password: PASSWORD, role: 'nurse' },
     ]);
     console.log('[Seeder] Created admin, doctor and nurse logins.');
 

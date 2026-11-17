@@ -7,6 +7,7 @@ import { Menu as MenuIcon, Search } from 'lucide-react';
 import Sidebar from './Sidebar';
 import Logo from './Logo';
 import CommandPalette from './CommandPalette';
+import AlertsBell from '../activity/AlertsBell';
 import { useAuth } from '../../context/AuthContext';
 
 export default function AppShell({ children }) {
@@ -50,16 +51,19 @@ export default function AppShell({ children }) {
       <Sidebar open={navOpen} onClose={() => setNavOpen(false)} onOpenSearch={() => setSearchOpen(true)} />
 
       {/* Mobile top bar */}
-      <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-white/90 px-2 backdrop-blur lg:hidden">
+      <div className="no-print sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-white/90 px-2 backdrop-blur lg:hidden">
         <button className="icon-btn" onClick={() => setNavOpen(true)} aria-label="Open menu">
           <MenuIcon className="h-5 w-5" />
         </button>
         <Link href="/" aria-label="Doctor Tracker home">
           <Logo />
         </Link>
-        <button className="icon-btn" onClick={() => setSearchOpen(true)} aria-label="Search">
-          <Search className="h-5 w-5" />
-        </button>
+        <div className="flex items-center">
+          <AlertsBell tone="light" />
+          <button className="icon-btn" onClick={() => setSearchOpen(true)} aria-label="Search">
+            <Search className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       <main id="main" className="lg:pl-[260px]">

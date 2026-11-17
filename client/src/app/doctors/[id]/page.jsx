@@ -3,30 +3,57 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Building2, Mail, Phone, CalendarDays, Award, Pencil, UserPlus, MoreHorizontal, Trash2, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  Building2,
+  Mail,
+  Phone,
+  CalendarDays,
+  Award,
+  Pencil,
+  UserPlus,
+  MoreHorizontal,
+  Trash2,
+  Users,
+  ArrowRightLeft,
+  FileText,
+  Archive,
+  Lock,
+  Clock,
+} from 'lucide-react';
 import api from '../../../lib/api';
 import useDebounce from '../../../hooks/useDebounce';
 import useApi from '../../../hooks/useApi';
+import { useAuth } from '../../../context/AuthContext';
+import { can } from '../../../lib/permissions';
 import Avatar from '../../../components/ui/Avatar';
 import StatusBadge from '../../../components/ui/StatusBadge';
+import FollowUpBadge from '../../../components/ui/FollowUpBadge';
+import CapacityMeter from '../../../components/ui/CapacityMeter';
 import SearchInput from '../../../components/ui/SearchInput';
 import Pagination from '../../../components/ui/Pagination';
 import Menu from '../../../components/ui/Menu';
 import EmptyState from '../../../components/ui/EmptyState';
 import ConfirmDialog from '../../../components/ui/ConfirmDialog';
+import Drawer from '../../../components/ui/Drawer';
+import Field from '../../../components/ui/Field';
 import Skeleton, { TableSkeleton } from '../../../components/ui/Skeleton';
 import DoctorForm from '../../../components/forms/DoctorForm';
 import PatientForm from '../../../components/forms/PatientForm';
+import TransferDialog from '../../../components/forms/TransferDialog';
 import { useToast } from '../../../components/ui/Toast';
-import { DOCTOR_STATUSES, PATIENT_STATUSES, findStatus } from '../../../lib/constants';
+import { DOCTOR_STATUSES, PATIENT_STATUSES, findShiftType, findStatus } from '../../../lib/constants';
 import { apiError, formatDate } from '../../../lib/format';
 
 const LIMIT = 10;
+const shiftLabel = (s) =>
+  `${findShiftType(s.type).label}, ${new Date(s.start).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} ${new Date(s.start).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
 
 export default function DoctorProfilePage() {
   const { id } = useParams();
   const router = useRouter();
   const notify = useToast();
+  const { user } = useAuth();
 
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
@@ -34,11 +61,16 @@ export default function DoctorProfilePage() {
   const debouncedSearch = useDebounce(search, 300);
 
   const [editingDoctor, setEditingDoctor] = useState(false);
-  const [patientForm, setPatientForm] = useState(undefined); // undefined closed, null admit, object edit
-  const [toRemove, setToRemove] = useState(null);
-  const [confirmDoctorDelete, setConfirmDoctorDelete] = useState(false);
+  const [admitting, setAdmitting] = useState(false);
+  const [transferring, setTransferring] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dialogError, setDialogError] = useState('');
+
+  const isOwn = user?.role === 'doctor' && String(user.doctor?._id || user.doctor) === id;
+  const canSeeRoster = user?.role !== 'doctor' || isOwn;
+  const canAdmit = can(user, 'patient.create') && (user.role === 'admin' || isOwn);
 
   const rosterQuery = useMemo(() => {
     const q = new URLSearchParams({ page, limit: LIMIT });
@@ -48,33 +80,31 @@ export default function DoctorProfilePage() {
   }, [page, debouncedSearch, status]);
 
   const doctorReq = useApi(`/doctors/${id}`, 'This doctor could not be loaded.');
-  const roster = useApi(`/doctors/${id}/patients?${rosterQuery}`, 'Patients could not be loaded.');
+  const roster = useApi(canSeeRoster ? `/doctors/${id}/patients?${rosterQuery}` : null, 'Patients could not be loaded.');
   const doctor = doctorReq.data?.data || null;
-  const doctorError = doctorReq.error;
   const patients = roster.data?.data || [];
   const pagination = roster.data?.pagination || { total: 0, totalPages: 1 };
-  const loading = roster.loading;
-  const fetchDoctor = doctorReq.reload;
-  const fetchRoster = roster.reload;
 
   const refreshAll = () => {
-    fetchDoctor();
-    fetchRoster();
+    doctorReq.reload();
+    roster.reload();
   };
 
-  const removePatient = async () => {
-    setBusy(true);
-    setDialogError('');
+  const removeFromList = async (p) => {
     try {
-      await api.delete(`/doctors/${id}/patients/${toRemove._id}`);
-      notify(`${toRemove.name} removed from ${doctor.name}'s patients`);
-      setToRemove(null);
+      await api.delete(`/doctors/${id}/patients/${p._id}`);
+      notify(`${p.name} removed from the list`, 'success', {
+        label: 'Undo',
+        onClick: async () => {
+          await api.post(`/patients/${p._id}/restore`);
+          notify(`${p.name} restored`);
+          refreshAll();
+        },
+      });
       if (patients.length === 1 && page > 1) setPage(page - 1);
       refreshAll();
     } catch (err) {
-      setDialogError(apiError(err, 'The patient could not be removed.'));
-    } finally {
-      setBusy(false);
+      notify(apiError(err, 'The patient could not be removed.'), 'error');
     }
   };
 
@@ -86,25 +116,22 @@ export default function DoctorProfilePage() {
       notify(`${doctor.name} deleted`);
       router.push('/doctors');
     } catch (err) {
-      setDialogError(apiError(err, 'The doctor could not be deleted.'));
+      if (err.response?.status === 409) {
+        setConfirmDelete(false);
+        setReassigning(true);
+      } else setDialogError(apiError(err, 'The doctor could not be deleted.'));
     } finally {
       setBusy(false);
     }
   };
 
-  const closeDialogs = () => {
-    setToRemove(null);
-    setConfirmDoctorDelete(false);
-    setDialogError('');
-  };
-
-  if (doctorError) {
+  if (doctorReq.error && !doctor) {
     return (
       <div className="panel">
         <EmptyState
           icon={Users}
           title="Doctor not found"
-          message={doctorError}
+          message={doctorReq.error}
           action={
             <Link href="/doctors" className="btn btn-secondary">
               Back to doctors
@@ -124,6 +151,7 @@ export default function DoctorProfilePage() {
         { icon: CalendarDays, label: 'On record since', value: formatDate(doctor.createdAt) },
       ]
     : [];
+  const totalWithStatus = doctor ? Object.values(doctor.statusCounts || {}).reduce((a, b) => a + b, 0) : 0;
 
   return (
     <>
@@ -132,7 +160,6 @@ export default function DoctorProfilePage() {
         Doctors
       </Link>
 
-      {/* Profile */}
       <section className="panel mb-6 overflow-hidden">
         {!doctor ? (
           <div className="flex items-center gap-5 p-6">
@@ -150,41 +177,83 @@ export default function DoctorProfilePage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.01em] text-ink">{doctor.name}</h1>
                   <StatusBadge status={findStatus(DOCTOR_STATUSES, doctor.status)} />
+                  {doctor.currentShift && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-pine-700 px-2.5 py-1 text-xs font-medium text-white">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-pine-200" />
+                      On duty now · {findShiftType(doctor.currentShift.type).label}
+                    </span>
+                  )}
                 </div>
-                <p className="mt-1 text-[15px] text-ink-soft">
-                  {doctor.specialization}
-                  <span className="text-faint"> with </span>
-                  <span className="num font-medium text-ink">
-                    {doctor.patientCount} patient{doctor.patientCount === 1 ? '' : 's'}
-                  </span>
-                </p>
+                <p className="mt-1 text-[15px] text-ink-soft">{doctor.specialization}</p>
+                {!doctor.currentShift && doctor.nextShift && (
+                  <p className="mt-1 flex items-center gap-1.5 text-[13px] text-muted">
+                    <Clock className="h-3.5 w-3.5" />
+                    Next shift: {shiftLabel(doctor.nextShift)}
+                  </p>
+                )}
                 {doctor.bio && <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted">{doctor.bio}</p>}
               </div>
-              <div className="flex shrink-0 gap-2">
-                <button className="btn btn-secondary" onClick={() => setEditingDoctor(true)}>
-                  <Pencil className="h-4 w-4" />
-                  Edit
-                </button>
-                <button className="btn btn-primary" onClick={() => setPatientForm(null)}>
-                  <UserPlus className="h-4 w-4" />
-                  Admit patient
-                </button>
-                <Menu
-                  items={[{ key: 'del', label: 'Delete doctor', icon: Trash2, danger: true, onClick: () => setConfirmDoctorDelete(true) }]}
-                  trigger={({ toggle, open }) => (
-                    <button
-                      className="btn btn-secondary w-10 px-0"
-                      onClick={toggle}
-                      aria-haspopup="menu"
-                      aria-expanded={open}
-                      aria-label="More actions"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
+              <div className="flex shrink-0 flex-col gap-3 md:w-56">
+                <div className="rounded-control border border-line p-3">
+                  <p className="mb-1 text-xs text-muted">Active caseload</p>
+                  <CapacityMeter count={doctor.patientCount} max={doctor.maxPatients} />
+                </div>
+                <div className="flex gap-2">
+                  {canAdmit && (
+                    <button className="btn btn-primary flex-1" onClick={() => setAdmitting(true)}>
+                      <UserPlus className="h-4 w-4" />
+                      Admit
                     </button>
                   )}
-                />
+                  {can(user, 'doctor.manage') && (
+                    <>
+                      <button className="btn btn-secondary flex-1" onClick={() => setEditingDoctor(true)}>
+                        <Pencil className="h-4 w-4" />
+                        Edit
+                      </button>
+                      <Menu
+                        items={[{ key: 'del', label: 'Delete doctor', icon: Trash2, danger: true, onClick: () => setConfirmDelete(true) }]}
+                        trigger={({ toggle, open }) => (
+                          <button
+                            className="btn btn-secondary w-10 px-0"
+                            onClick={toggle}
+                            aria-haspopup="menu"
+                            aria-expanded={open}
+                            aria-label="More actions"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        )}
+                      />
+                    </>
+                  )}
+                </div>
               </div>
             </div>
+
+            {totalWithStatus > 0 && (
+              <div className="border-t border-line px-5 py-4 sm:px-7">
+                <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full">
+                  {PATIENT_STATUSES.filter((s) => doctor.statusCounts?.[s.value]).map((s) => (
+                    <div
+                      key={s.value}
+                      className={s.bar}
+                      style={{ width: `${(doctor.statusCounts[s.value] / totalWithStatus) * 100}%` }}
+                      title={`${s.label}: ${doctor.statusCounts[s.value]}`}
+                    />
+                  ))}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {PATIENT_STATUSES.filter((s) => doctor.statusCounts?.[s.value]).map((s) => (
+                    <span key={s.value} className="num flex items-center gap-1.5 text-xs text-muted">
+                      <span className={`h-2 w-2 rounded-sm ${s.bar}`} />
+                      {s.label} {doctor.statusCounts[s.value]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <dl className="grid grid-cols-1 gap-px border-t border-line bg-line sm:grid-cols-2 lg:grid-cols-5">
               {facts.map((f) => (
                 <div key={f.label} className="flex items-start gap-3 bg-[#FAFBFB] px-5 py-4 sm:px-7 lg:px-5">
@@ -208,54 +277,56 @@ export default function DoctorProfilePage() {
         )}
       </section>
 
-      {/* Patient roster */}
       <section className="panel overflow-visible" aria-labelledby="roster-title">
         <div className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
           <h2 id="roster-title" className="text-[15px] font-semibold text-ink">
             Patients under this doctor
           </h2>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <SearchInput
-              value={search}
-              onChange={(v) => {
-                setSearch(v);
-                setPage(1);
-              }}
-              placeholder="Search name, condition or phone"
-              className="sm:w-72"
-            />
-            <select
-              className="select sm:w-48"
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-              aria-label="Clinical status"
-            >
-              <option value="">Any status</option>
-              {PATIENT_STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {canSeeRoster && (
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <SearchInput
+                value={search}
+                onChange={(v) => {
+                  setSearch(v);
+                  setPage(1);
+                }}
+                placeholder="Search this list"
+                className="sm:w-64"
+              />
+              <select
+                className="select sm:w-48"
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  setPage(1);
+                }}
+                aria-label="Clinical status"
+              >
+                <option value="">Any status</option>
+                {PATIENT_STATUSES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-line">
-          {loading && !patients.length ? (
+          {!canSeeRoster ? (
+            <EmptyState icon={Lock} title="Visible to this doctor's care team" message="Doctors can only open their own patients' records." />
+          ) : roster.loading && !patients.length ? (
             <TableSkeleton rows={4} />
           ) : !patients.length ? (
             <EmptyState
               icon={Users}
               title={search || status ? 'No patients match' : 'No patients yet'}
-              message={
-                search || status ? 'Try a different search or status.' : `Admit a patient under ${doctor?.name || 'this doctor'} to start their list.`
-              }
+              message={search || status ? 'Try a different search or status.' : 'Admit a patient to start this list.'}
               action={
-                !(search || status) && (
-                  <button className="btn btn-primary" onClick={() => setPatientForm(null)}>
+                !(search || status) &&
+                canAdmit && (
+                  <button className="btn btn-primary" onClick={() => setAdmitting(true)}>
                     <UserPlus className="h-4 w-4" />
                     Admit patient
                   </button>
@@ -263,84 +334,32 @@ export default function DoctorProfilePage() {
               }
             />
           ) : (
-            <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
-              <div className="hidden overflow-x-auto md:block">
-                <table className="w-full">
-                  <thead className="table-head">
-                    <tr>
-                      <th scope="col">Patient</th>
-                      <th scope="col">Condition</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Admitted</th>
-                      <th scope="col">
-                        <span className="sr-only">Actions</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {patients.map((p) => (
-                      <tr key={p._id} className="table-row group cursor-pointer hover:bg-[#FAFBFB]" onClick={() => setPatientForm(p)}>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <Avatar name={p.name} size="sm" />
-                            <div>
-                              <span className="block font-medium text-ink group-hover:text-pine-700">{p.name}</span>
-                              <span className="num block text-[13px] text-muted">
-                                {p.age} yrs, {p.gender}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="text-ink">{p.condition}</td>
-                        <td>
-                          <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} />
-                        </td>
-                        <td className="num whitespace-nowrap text-ink-soft">{formatDate(p.admissionDate)}</td>
-                        <td className="w-12 text-right" onClick={(e) => e.stopPropagation()}>
-                          <Menu
-                            items={[
-                              { key: 'edit', label: 'Edit patient', icon: Pencil, onClick: () => setPatientForm(p) },
-                              { key: 'rm', label: 'Remove from list', icon: Trash2, danger: true, onClick: () => setToRemove(p) },
-                            ]}
-                            trigger={({ toggle, open }) => (
-                              <button
-                                className="icon-btn"
-                                onClick={toggle}
-                                aria-haspopup="menu"
-                                aria-expanded={open}
-                                aria-label={`Actions for ${p.name}`}
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </button>
-                            )}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <ul className="divide-y divide-line md:hidden">
+            <div className={`transition-opacity ${roster.loading ? 'opacity-60' : ''}`} aria-busy={roster.loading}>
+              <ul className="divide-y divide-line">
                 {patients.map((p) => (
-                  <li key={p._id} className="flex items-start gap-3 px-4 py-4">
-                    <button type="button" onClick={() => setPatientForm(p)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                  <li key={p._id} className="flex items-center gap-3 px-4 py-3 hover:bg-[#FAFBFB] sm:px-5">
+                    <Link href={`/patients/${p._id}`} className="flex min-w-0 flex-1 items-center gap-3">
                       <Avatar name={p.name} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium text-ink">{p.name}</span>
-                        <span className="block truncate text-[13px] text-muted">
+                        <span className="num block truncate text-[13px] text-muted">
                           {p.condition}, {p.age} yrs
                         </span>
-                        <span className="mt-2 flex items-center gap-2">
-                          <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} size="sm" />
-                          <span className="num text-xs text-faint">{formatDate(p.admissionDate)}</span>
-                        </span>
                       </span>
-                    </button>
+                      <span className="hidden sm:block">
+                        {p.status !== 'Discharged' && p.followUpDate && <FollowUpBadge date={p.followUpDate} />}
+                      </span>
+                      <StatusBadge status={findStatus(PATIENT_STATUSES, p.status)} />
+                    </Link>
                     <Menu
                       items={[
-                        { key: 'edit', label: 'Edit patient', icon: Pencil, onClick: () => setPatientForm(p) },
-                        { key: 'rm', label: 'Remove from list', icon: Trash2, danger: true, onClick: () => setToRemove(p) },
+                        { key: 'open', label: 'Open record', icon: FileText, onClick: () => router.push(`/patients/${p._id}`) },
+                        ...(can(user, 'patient.transfer')
+                          ? [{ key: 'tr', label: 'Transfer', icon: ArrowRightLeft, onClick: () => setTransferring({ ...p, doctor }) }]
+                          : []),
+                        ...(can(user, 'patient.archive')
+                          ? [{ key: 'rm', label: 'Remove from list', icon: Archive, danger: true, onClick: () => removeFromList(p) }]
+                          : []),
                       ]}
                       trigger={({ toggle, open }) => (
                         <button
@@ -360,43 +379,98 @@ export default function DoctorProfilePage() {
             </div>
           )}
         </div>
-
-        <Pagination page={page} totalPages={pagination.totalPages} total={pagination.total} limit={LIMIT} onPageChange={setPage} noun="patients" />
+        {canSeeRoster && (
+          <Pagination page={page} totalPages={pagination.totalPages} total={pagination.total} limit={LIMIT} onPageChange={setPage} noun="patients" />
+        )}
       </section>
 
-      <DoctorForm open={editingDoctor} doctor={doctor} onClose={() => setEditingDoctor(false)} onSaved={fetchDoctor} />
-      <PatientForm
-        open={patientForm !== undefined}
-        patient={patientForm || null}
-        fixedDoctor={patientForm ? undefined : doctor}
-        doctors={doctor ? [doctor] : []}
-        onClose={() => setPatientForm(undefined)}
-        onSaved={refreshAll}
-      />
+      <DoctorForm open={editingDoctor} doctor={doctor} onClose={() => setEditingDoctor(false)} onSaved={refreshAll} />
+      <PatientForm open={admitting} patient={null} fixedDoctor={doctor} onClose={() => setAdmitting(false)} onSaved={refreshAll} />
+      <TransferDialog patient={transferring} onClose={() => setTransferring(null)} onDone={refreshAll} />
       <ConfirmDialog
-        open={Boolean(toRemove)}
-        title={`Remove ${toRemove?.name}?`}
-        message={`${toRemove?.name} is removed from ${doctor?.name}'s patients and their record is deleted. This cannot be undone.`}
-        confirmLabel="Remove patient"
-        busy={busy}
-        error={dialogError}
-        onConfirm={removePatient}
-        onCancel={closeDialogs}
-      />
-      <ConfirmDialog
-        open={confirmDoctorDelete}
+        open={confirmDelete}
         title={`Delete ${doctor?.name}?`}
-        message={
-          doctor?.patientCount
-            ? `${doctor.name} still has ${doctor.patientCount} patient${doctor.patientCount === 1 ? '' : 's'}. Remove or reassign them first; the delete will be refused until then.`
-            : 'The doctor is removed from the directory permanently.'
-        }
+        message="The doctor is removed from the directory and their shifts are cancelled. If they still have patients you'll be asked who takes over."
         confirmLabel="Delete doctor"
         busy={busy}
         error={dialogError}
         onConfirm={deleteDoctor}
-        onCancel={closeDialogs}
+        onCancel={() => {
+          setConfirmDelete(false);
+          setDialogError('');
+        }}
       />
+      {reassigning && doctor && (
+        <ReassignPanel
+          doctor={doctor}
+          onClose={() => setReassigning(false)}
+          onDone={() => {
+            setReassigning(false);
+            refreshAll();
+            setConfirmDelete(true);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/** Before a doctor with patients can be deleted, their whole caseload moves to a colleague. */
+function ReassignPanel({ doctor, onClose, onDone }) {
+  const notify = useToast();
+  const others = (useApi('/doctors?limit=100&sortBy=name&order=asc').data?.data || []).filter((d) => d._id !== doctor._id);
+  const [target, setTarget] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const res = await api.post(`/doctors/${doctor._id}/reassign`, { doctor: target });
+      notify(res.data.message);
+      onDone();
+    } catch (err) {
+      setError(apiError(err, 'Patients could not be reassigned.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      title="Reassign patients first"
+      description={`${doctor.name} still has patient records. Choose who takes them over; then you can delete the doctor.`}
+      footer={
+        <>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" form="reassign-form" className="btn btn-primary" disabled={saving || !target}>
+            {saving ? 'Moving…' : 'Move all patients'}
+          </button>
+        </>
+      }
+    >
+      <form id="reassign-form" onSubmit={submit} className="space-y-4">
+        {error && <p className="rounded-control bg-critical-soft px-3 py-2.5 text-sm text-critical">{error}</p>}
+        <Field id="r-doc" label="New attending doctor" required>
+          <select id="r-doc" className="select" required value={target} onChange={(e) => setTarget(e.target.value)}>
+            <option value="" disabled>
+              Choose a doctor
+            </option>
+            {others.map((d) => (
+              <option key={d._id} value={d._id}>
+                {d.name} — {d.specialization} ({d.patientCount}/{d.maxPatients})
+              </option>
+            ))}
+          </select>
+        </Field>
+        <p className="text-[13px] text-muted">Every move is recorded in the patients&apos; history.</p>
+      </form>
+    </Drawer>
   );
 }

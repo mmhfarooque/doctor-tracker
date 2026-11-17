@@ -33,3 +33,19 @@ export const DOT_CLASSES = {
 };
 
 export const findStatus = (list, value) => list.find((s) => s.value === value) || { value, label: value, tone: 'discharged' };
+
+export const FOLLOW_UP_FILTERS = [
+  { value: 'overdue', label: 'Overdue follow-up' },
+  { value: 'today', label: 'Follow-up due today' },
+  { value: 'week', label: 'Follow-up in next 7 days' },
+  { value: 'none', label: 'No follow-up planned' },
+];
+
+export const SHIFT_TYPES = [
+  { value: 'Day', label: 'Day', hours: '08:00–16:00', tone: 'bg-[#E5EDFB] text-[#24509E] border-[#C9D9F5]' },
+  { value: 'Evening', label: 'Evening', hours: '16:00–24:00', tone: 'bg-[#FBF0D9] text-[#7A4E00] border-[#F0DDB0]' },
+  { value: 'Night', label: 'Night', hours: '00:00–08:00', tone: 'bg-[#ECE8F7] text-[#4B3A8A] border-[#D8CFF0]' },
+  { value: 'On-call', label: 'On call', hours: '24 h from 08:00', tone: 'bg-pine-50 text-pine-800 border-pine-200' },
+];
+
+export const findShiftType = (value) => SHIFT_TYPES.find((s) => s.value === value) || SHIFT_TYPES[0];

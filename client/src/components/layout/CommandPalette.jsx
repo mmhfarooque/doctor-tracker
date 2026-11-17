@@ -28,7 +28,7 @@ const toItems = (doctors, patients) => [
     type: 'Patient',
     title: pat.name,
     meta: `${pat.condition}${pat.doctor?.name ? `, with ${pat.doctor.name}` : ''}`,
-    href: `/patients?search=${encodeURIComponent(pat.name)}`,
+    href: `/patients/${pat._id}`,
   })),
 ];
 
