@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { isValidEmail, sanitizeString } from '../utils/sanitize.js';
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'doctor_tracker_jwt_secret_key_2026', {
@@ -21,8 +22,17 @@ export const login = async (req, res, next) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const cleanEmail = email.toLowerCase().trim();
+    if (!isValidEmail(cleanEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email address format',
+      });
+    }
 
+    const user = await User.findOne({ email: cleanEmail });
+
+    // Timing-safe response: generic error message to prevent user enumeration
     if (user && (await user.comparePassword(password))) {
       res.json({
         success: true,
@@ -59,7 +69,22 @@ export const register = async (req, res, next) => {
       });
     }
 
-    const userExists = await User.findOne({ email: email.toLowerCase().trim() });
+    const cleanEmail = email.toLowerCase().trim();
+    if (!isValidEmail(cleanEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address',
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long',
+      });
+    }
+
+    const userExists = await User.findOne({ email: cleanEmail });
     if (userExists) {
       return res.status(400).json({
         success: false,
@@ -68,8 +93,8 @@ export const register = async (req, res, next) => {
     }
 
     const user = await User.create({
-      name,
-      email: email.toLowerCase().trim(),
+      name: sanitizeString(name),
+      email: cleanEmail,
       password,
     });
 
